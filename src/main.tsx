@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-import App from "./App";
+// import App from "./App";
 import { ApolloProvider } from "@apollo/client";
 import { apolloClient } from "../src/components/graphQL/apollo-client";
 import { BrowserRouter } from "react-router-dom";
