@@ -16,7 +16,8 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           {" "}
           {/* <-- Wrap your app with BrowserRouter */}
-          <App />
+          {/* <App /> */}
+          hi
           <ToastContainer />
         </BrowserRouter>
       </ReduxProvider>
