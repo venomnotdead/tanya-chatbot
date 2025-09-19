@@ -95,7 +95,7 @@ export interface Variant {
 export interface SearchProduct {
   productType: string;
   name: LocalizedString;
-  product_name: String;
+  product_name: string;
   description: LocalizedString;
   key: string;
   slug: LocalizedString;

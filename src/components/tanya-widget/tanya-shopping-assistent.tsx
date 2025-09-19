@@ -4,7 +4,7 @@ import { Popover, PopoverTrigger } from "../ui/popover";
 // import tanyaChatBotIcon from "@/assets/tanya-chatbot/chat-with-tanya.png";
 // import { getAccessToken } from "../utils/getAccessToken";
 import { getSearchResults } from "../utils";
-import type { SearchProduct } from "../graphQL/queries/types";
+import type { Product, SearchProduct } from "../graphQL/queries/types";
 import {
   // decryptData,
   // currencyFormatter,
@@ -18,6 +18,17 @@ import { useSelector } from "react-redux";
 // import { fetchStoreConfig } from "../api/api";
 // import { setStore } from "../../store/reducers/storeReducer";
 import ProductDisplayCard from "../product/ProductDisplayCard";
+import { getAccessToken } from "../utils/getAccessToken";
+
+type ProductSnapshot = {
+  id: string;
+  name: string;
+  image: string | null;
+  price: number | null;
+  points: number;
+  quantity: number;
+};
+
 const TanyaShoppingAssistantStream = () => {
   // Shopping options
   const shoppingOptions = [
@@ -37,6 +48,10 @@ const TanyaShoppingAssistantStream = () => {
     "My Friends": "his/her friends",
     Others: "others",
   };
+  const productName = useRef<string | null>(null);
+  const productId = useRef<number | null>(null);
+  const productImage = useRef<string | null>(null);
+  const productPrice = useRef<number | null>(null);
 
   const [searchParams] = useSearchParams();
   const [isOpen, setIsOpen] = useState(
@@ -44,10 +59,17 @@ const TanyaShoppingAssistantStream = () => {
   );
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
-
+  const [adding, setAdding] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [productLoading, setProductLoading] = useState(false);
   const [inputText, setInputText] = useState("");
   const [whom, setWhom] = useState("");
+  const mapSnapshotToProduct = (snap: ProductSnapshot): any => ({
+    id: snap.id,
+    title: snap.name,
+    image: snap.image ?? "",
+    price: snap.price ?? 0,
+  });
   // const dispatch = useDispatch();
 
   const [chatHistory, setChatHistory] = useState<
@@ -55,8 +77,12 @@ const TanyaShoppingAssistantStream = () => {
       query: string;
       response: string;
       potentialQuestions: string;
-      products?: { keyword: string; items: SearchProduct[]; }[];
+      products?: { keyword: string; items: SearchProduct[] }[];
       keywords: string;
+      noResults?: boolean;
+      secondaryResponse?: string;
+      secondaryLoading?: boolean;
+      productSnapshot?: ProductSnapshot; // NEW
     }[]
   >([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -92,6 +118,100 @@ const TanyaShoppingAssistantStream = () => {
 
   let cachedToken: any = null;
   let tokenExpiry: any = null;
+
+  const runSecondaryFlow = async (productTitle: string, points: number) => {
+    try {
+      // surprise animation
+      setChatHistory((prev) =>
+        prev.map((msg, idx) =>
+          idx === prev.length - 1 ? { ...msg, secondaryLoading: true } : msg
+        )
+      );
+
+      const token = await getAccessToken();
+      if (!token) throw new Error("Failed to fetch token");
+
+      const user = localStorage.getItem("customerNumber");
+      const isLoggedIn = localStorage.getItem("isLoggedIn");
+      const URL = `${
+        import.meta.env.VITE_SERVER_BASE_URL
+      }api/web-bff/assistantStream?application=tanya&userId=${
+        user || new Date().getTime()
+      }&registered=${isLoggedIn}`;
+
+      const body = {
+        flowId: "Q166PR519W",
+        flowAliasId: "HKFUVLWVH2",
+        input: {
+          loyaltyPoints: "",
+          productName: productTitle,
+          productPoints: String(points || 0),
+          interests: "shopping",
+        },
+      };
+
+      const response = await fetch(`${URL}`, {
+        signal: AbortSignal.timeout(30000),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.body) throw new Error("Readable stream not supported");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const jsonData = line.slice(5).trim();
+            try {
+              const parsedData = JSON.parse(jsonData);
+
+              if (parsedData.index === 0) {
+                // attach response & stop animation
+                setChatHistory((prev) =>
+                  prev.map((msg, idx) =>
+                    idx === prev.length - 1
+                      ? {
+                          ...msg,
+                          secondaryResponse: parsedData.data,
+                          secondaryLoading: false,
+                        }
+                      : msg
+                  )
+                );
+              }
+              // ignore 1/2/3
+            } catch (e) {
+              // stop animation on parse error too
+              setChatHistory((prev) =>
+                prev.map((msg, idx) =>
+                  idx === prev.length - 1
+                    ? { ...msg, secondaryLoading: false }
+                    : msg
+                )
+              );
+              console.error("Secondary flow JSON parse error:", e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Secondary flow error:", e);
+    }
+  };
 
   const getJWTToken = async () => {
     if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
@@ -174,7 +294,7 @@ const TanyaShoppingAssistantStream = () => {
         userId: String(user || new Date().getTime()),
       });
 
-      const invokeUrl = `https://tanya.aspiresys-retail.com/api/bedrock/invoke/stream?${queryParams.toString()}`;
+      const invokeUrl = `https://tanya.aspiresystems.com/api/bedrock/invoke/stream?${queryParams.toString()}`;
 
       const payload = JSON.stringify({
         flowId: "3LUE6PX8GT",
@@ -207,6 +327,7 @@ const TanyaShoppingAssistantStream = () => {
       let keywords = "";
 
       while (true) {
+        setProductLoading(true);
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -241,7 +362,6 @@ const TanyaShoppingAssistantStream = () => {
           }
         }
       }
-
       getKeywords(sanitizeKeywords(keywords));
     } catch (error) {
       console.error("Error sending message to Tanya:", error);
@@ -271,6 +391,7 @@ const TanyaShoppingAssistantStream = () => {
           keyword
           // storeDetails.searchConfigs
         );
+        setProductLoading(false);
         if (results?.length > 0) {
           setChatHistory((prev) =>
             prev.map((msg, idx) =>
@@ -279,12 +400,29 @@ const TanyaShoppingAssistantStream = () => {
                     ...msg,
                     products: [
                       ...(msg.products || []),
-                      { keyword: keyword, items: results,loading: false },
+                      { keyword: keyword, items: results, loading: false },
                     ],
                   }
                 : msg
             )
           );
+          if (!productName.current || productId.current == null) {
+            const first = results[0] as any;
+            productName.current = String(first?.product_name ?? "");
+
+            // image
+            const img = first?.image ?? null;
+            productImage.current = img ? String(img) : null;
+
+            // price
+            const priceVal =
+              typeof first?.price === "number" ? first.price : undefined;
+
+            productPrice.current =
+              typeof priceVal === "number" && Number.isFinite(priceVal)
+                ? priceVal
+                : null;
+          }
         }
       }
     } else {
@@ -293,6 +431,7 @@ const TanyaShoppingAssistantStream = () => {
           keyword
           // storeDetails.searchConfigs
         );
+        setProductLoading(false);
         if (results?.length > 0) {
           setChatHistory((prev) =>
             prev.map((msg, idx) =>
@@ -301,7 +440,7 @@ const TanyaShoppingAssistantStream = () => {
                     ...msg,
                     products: [
                       ...(msg.products || []),
-                      { keyword: keyword, items: results,loading: false },
+                      { keyword: keyword, items: results, loading: false },
                     ],
                   }
                 : msg
@@ -310,6 +449,44 @@ const TanyaShoppingAssistantStream = () => {
         }
       }
     }
+    if (productName.current)
+      runSecondaryFlow(productName.current, 0);
+    setProductLoading(true);
+  };
+
+  const handleAddToCart = async (
+    productToBeAdded: Product,
+    quantity: number
+  ) => {
+    // const product = { ...productToBeAdded, quantity };
+    console.log(productToBeAdded,quantity);
+    setAdding(true);
+    // try {
+    //   const cartId = localStorage.getItem("cartId");
+    //   const isLoggedIn = localStorage.getItem("isLoggedIn");
+    //   if (isLoggedIn === "true") {
+    //     const token = await getAccessToken();
+    //     if (cartId) {
+    //       await updateCart(cartId, [product] as any, token);
+    //     } else {
+    //       const newCartId = await addToCart([product] as any, token);
+    //       localStorage.setItem("cartId", newCartId);
+    //     }
+    //   } else {
+    //     localStorage.setItem("isNewCart", "true");
+    //   }
+    //   const cart = JSON.parse(localStorage.getItem("cart") || "[]") || [];
+    //   const newCart = cart.filter((c: Product) => c.id !== product.id);
+    //   newCart.push(product);
+    //   dispatch(addToCartAction(product as any));
+    //   toast.success("Product added to cart");
+    //   localStorage.setItem("cart", JSON.stringify(newCart));
+    // } catch (error) {
+    //   console.error("Error adding product to cart:", error);
+    //   toast.error("Something went wrong while adding to cart");
+    // } finally {
+    setAdding(false);
+    // }
   };
 
   // Update the main container div's className
@@ -570,15 +747,15 @@ const TanyaShoppingAssistantStream = () => {
                             />
                           </div>
                         )}
-                        {
-                          chat.keywords && chat?.products?.length == 0 && chat.keywords.includes("Thinking") && (
+                        {productLoading &&
+                          !chat.response.includes("Thinking") &&
+                          chat.products?.length == 0 && (
                             <div>
-                                <p className="text-sm animate-pulse font-nunitoSans font-bold text-[#000000] bg-[#E2DBFF] border border-[#C9C2DE] rounded-l-xl p-2 m-3 mb-4 rounded-br-xl max-w-[75%]">
-                                  {chat.keywords}
-                                </p>
+                              <p className="text-sm animate-pulse font-nunitoSans font-bold text-[#000000] bg-[#E2DBFF] border border-[#C9C2DE] rounded-l-xl p-2 m-3 mb-4 rounded-br-xl max-w-[75%]">
+                                Finding best products for you
+                              </p>
                             </div>
-                          )
-                        }
+                          )}
                         {chat?.products && chat?.products?.length > 0 && (
                           <ProductDisplay
                             chat={chat.products}
@@ -611,6 +788,220 @@ const TanyaShoppingAssistantStream = () => {
                                 </button>
                               ))}
                           </div>
+                        )}
+
+                        {chat.secondaryLoading && (
+                          <div className="mt-3 mb-4 px-4">
+                            <div
+                              className="tanya-surprise-wrapper text-sm px-7 py-4 rounded-r-xl rounded-bl-2xl w-full relative overflow-hidden"
+                              style={{
+                                backgroundColor:
+                                  storeDetails.tanyaThemeColorLight,
+                                margin: "0.75rem",
+                              }}
+                            >
+                              <div className="tanya-sparkle tanya-sparkle-1">
+                                ✨
+                              </div>
+                              <div className="tanya-sparkle tanya-sparkle-2">
+                                ✨
+                              </div>
+                              <div className="tanya-sparkle tanya-sparkle-3">
+                                ✨
+                              </div>
+                              <div className="tanya-shimmer" />
+                              <p
+                                className="font-semibold tanya-pulse"
+                                style={{ color: storeDetails.themeDarkColor }}
+                              >
+                                I’ve found a special surprise crafted just for
+                                you… hang on a sec!
+                              </p>
+                              <p
+                                className="tanya-dots mt-1"
+                                style={{ color: storeDetails.themeDarkColor }}
+                              >
+                                • • •
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Secondary Response (from secondary flow) */}
+                        {chat.secondaryResponse && (
+                          <>
+                            <div className="mt-3 mb-8 px-4">
+                              {/* Chat Response */}
+                              <div
+                                className="text-sm text-[#232323] bg-[#FFFFFF] px-7 py-4 rounded-r-xl rounded-bl-2xl w-full"
+                                style={{
+                                  backgroundColor:
+                                    storeDetails.tanyaThemeColorLight,
+                                }}
+                                dangerouslySetInnerHTML={{
+                                  __html: formatStringToHtml(
+                                    chat.secondaryResponse
+                                  ),
+                                }}
+                              />
+
+                              {/* Product Card */}
+                              {chat.productSnapshot &&
+                                chat.productSnapshot.points > 0 && (
+                                  <div className="mt-4 w-full">
+                                    <div
+                                      className="flex gap-4 items-stretch rounded-2xl p-4"
+                                      style={{
+                                        backgroundColor:
+                                          storeDetails.tanyaThemeColorLight,
+                                      }}
+                                    >
+                                      <div
+                                        className="flex-shrink-0 rounded-xl overflow-hidden border"
+                                        style={{
+                                          width: 112,
+                                          height: 112,
+                                          borderColor: "#eee",
+                                        }}
+                                      >
+                                        {chat.productSnapshot.image ? (
+                                          <img
+                                            src={chat.productSnapshot.image}
+                                            alt={chat.productSnapshot.name}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
+                                            No Image
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="flex flex-col flex-1 justify-between">
+                                        <div>
+                                          <p className="font-semibold text-[15px] leading-snug">
+                                            {chat.productSnapshot.name}
+                                          </p>
+                                          <p className="mt-1 text-[14px] font-medium">
+                                            {chat.productSnapshot.price != null
+                                              ? new Intl.NumberFormat(
+                                                  undefined,
+                                                  {
+                                                    style: "currency",
+                                                    currency:
+                                                      storeDetails?.currency ||
+                                                      "USD",
+                                                  }
+                                                ).format(
+                                                  chat.productSnapshot.price
+                                                )
+                                              : ""}
+                                          </p>
+
+                                          <p className="mt-1 text-xs opacity-80">
+                                            You will earn{" "}
+                                            <strong>
+                                              {chat.productSnapshot.points}{" "}
+                                              points
+                                            </strong>
+                                          </p>
+                                        </div>
+
+                                        <div className="mt-3 flex items-center gap-3">
+                                          <div className="flex items-center border rounded-full overflow-hidden">
+                                            <button
+                                              className="px-3 py-1 text-sm"
+                                              onClick={() =>
+                                                setChatHistory((prev) =>
+                                                  prev.map((m, i) =>
+                                                    i === index &&
+                                                    m.productSnapshot
+                                                      ? {
+                                                          ...m,
+                                                          productSnapshot: {
+                                                            ...m.productSnapshot,
+                                                            quantity: Math.max(
+                                                              1,
+                                                              m.productSnapshot
+                                                                .quantity - 1
+                                                            ),
+                                                          },
+                                                        }
+                                                      : m
+                                                  )
+                                                )
+                                              }
+                                              style={{
+                                                background: "transparent",
+                                                color:
+                                                  storeDetails.themeDarkColor,
+                                              }}
+                                            >
+                                              −
+                                            </button>
+                                            <div className="px-3 py-1 text-sm select-none">
+                                              {chat.productSnapshot.quantity}
+                                            </div>
+                                            <button
+                                              className="px-3 py-1 text-sm"
+                                              onClick={() =>
+                                                setChatHistory((prev) =>
+                                                  prev.map((m, i) =>
+                                                    i === index &&
+                                                    m.productSnapshot
+                                                      ? {
+                                                          ...m,
+                                                          productSnapshot: {
+                                                            ...m.productSnapshot,
+                                                            quantity:
+                                                              m.productSnapshot
+                                                                .quantity + 1,
+                                                          },
+                                                        }
+                                                      : m
+                                                  )
+                                                )
+                                              }
+                                              style={{
+                                                background: "transparent",
+                                                color:
+                                                  storeDetails.themeDarkColor,
+                                              }}
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                          <button
+                                            onClick={() =>
+                                              handleAddToCart(
+                                                mapSnapshotToProduct(
+                                                  chat.productSnapshot!
+                                                ),
+                                                chat.productSnapshot!.quantity
+                                              )
+                                            }
+                                            disabled={adding}
+                                            className="px-4 py-2 rounded-full font-medium"
+                                            style={{
+                                              background:
+                                                storeDetails.tanyaThemeColor,
+                                              color:
+                                                storeDetails?.tanyaThemeContrastColor ||
+                                                "#fff",
+                                              opacity: adding ? 0.8 : 1,
+                                            }}
+                                          >
+                                            {adding
+                                              ? "Adding..."
+                                              : "Add to cart"}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                            </div>
+                          </>
                         )}
                       </div>
                     ))}
