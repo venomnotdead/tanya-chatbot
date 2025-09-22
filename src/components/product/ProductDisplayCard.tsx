@@ -27,40 +27,7 @@ const ProductDisplayCard = () => {
   const dispatch = useDispatch();
   const product = useSelector((state: any) => state.product.product);
   const storeDetails = useSelector((s: any) => s.store.store);
-
-  // const [selectedSize, setSelectedSize] = useState<string>("");
-  // const [selectedColor, setSelectedColor] = useState<string>("");
-  // const [selectedWidth, setSelectedWidth] = useState<string>("");
-
-  // Animation state
   const [show, setShow] = useState(!!product);
-
-  // Memoize attributes to prevent recalculation on every render
-  // const attributes = useMemo(() => {
-  //   if (!product?.variation_attributes)
-  //     return { sizeAttr: null, colorAttr: null, widthAttr: null };
-
-  //   return {
-  //     sizeAttr: product.variation_attributes.find((a: any) => a.id === "size"),
-  //     colorAttr: product.variation_attributes.find(
-  //       (a: any) => a.id === "color"
-  //     ),
-  //     widthAttr: product.variation_attributes.find(
-  //       (a: any) => a.id === "width"
-  //     ),
-  //   };
-  // }, [product?.variation_attributes]);
-
-  // Update selected values when product or attributes change
-  // useEffect(() => {
-  //   if (!product?.variation_attributes) return;
-
-  //   const { sizeAttr, colorAttr, widthAttr } = attributes;
-
-  //   setSelectedSize(sizeAttr?.values?.[0]?.value || "");
-  //   setSelectedColor(colorAttr?.values?.[0]?.value || "");
-  //   setSelectedWidth(widthAttr?.values?.[0]?.value || "");
-  // }, [product, attributes]);
 
   useEffect(() => {
     setShow(!!product);
@@ -86,10 +53,9 @@ const ProductDisplayCard = () => {
       ];
 
       // for getting customer id
-      const customerData = JSON.parse(sessionStorage.getItem("customerData")|| "{}")
-      // if isGuest is true it is guest customer if false it is register customer
-      // const isGuest = customerData?.isGuest ?? true;
-      // const customerId = customerData?.customerId;
+      const customerData = JSON.parse(
+        sessionStorage.getItem("customerData") || "{}"
+      );
       const basketIdFromCustomer = customerData?.basketId;
       const customer_token = false;
       const tokenExpiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
@@ -101,30 +67,17 @@ const ProductDisplayCard = () => {
         !tokenExpiry ||
         currentTime >= parseInt(tokenExpiry)
       ) {
-        // Get token once and use it for both calls (createBasket, addProductToBasket)
-        // token = await fetchTokenSFCC();
         const access_token = await fetchTokenBmGrant();
 
-        
-        // if (isGuest) {
-         const  { customer_token } = await fetchExistingGuestCustomerToken(
-            access_token,
-          );
-          // access_token
-          // customerId,
-        // } else {
-        //   ({ customer_token } = await fetchExistingRegisterCustomerToken({
-        //     access_token,
-        //     customerId,
-        //   }));
-        // }
+        const { customer_token } = await fetchExistingGuestCustomerToken(
+          access_token
+        );
 
         if (!customer_token) {
           console.error("Failed to get customer_token");
           return;
         }
-        // Store new customer_token with expiry time (5 minutes from now)
-        const newExpiryTime = currentTime + 5 * 60 * 1000; // 5 minutes in milliseconds
+        const newExpiryTime = currentTime + 5 * 60 * 1000; 
         setStoredToken(customer_token);
         localStorage.setItem(TOKEN_EXPIRY_KEY, newExpiryTime.toString());
 
@@ -175,10 +128,6 @@ const ProductDisplayCard = () => {
           customer_token
         );
         if (response?.product_items?.length > 0) {
-          // const addedProduct = response.product_items.at(-1);
-          // const addedProduct = response.product_items[response.product_items.length - 1];
-          // addedProduct.product_name;
-          // addedProduct.product_id;
           toast.success(`Added to cart`, {
             position: "bottom-right",
             autoClose: 3000,
@@ -188,7 +137,6 @@ const ProductDisplayCard = () => {
             draggable: true,
           });
           notifySFCC(basketResponse.basket_id);
-          // window.location.reload(); // Refresh page to update cart
         }
       } else {
         // Use existing customer_token and basket ID
@@ -352,88 +300,6 @@ const ProductDisplayCard = () => {
         </div>
         {/* horizontal line */}
         <div className="mt-2 w-full border-t-2 border-gray-200"></div>
-        {/* Size */}
-        {/* {sizeAttr ? (
-          <div className="mt-3 flex flex-col justify-between w-full text-gray-500">
-            <div className="text-[#323135] font-semibold font-nunitoSans">
-              Select Size
-            </div>
-            <div className="flex flex-row flex-wrap items-center gap-4 mt-3">
-              {sizeAttr.values.map((size: any) => (
-                <div
-                  key={size.value}
-                  className={`border border-[#A7A5AF] text-[#323135] font-normal font-nunitoSans rounded-[6px] w-[30px] h-[30px] p-2 flex-wrap text-xs flex items-center justify-center cursor-pointer ${
-                    selectedSize === size.value ? "text-[#FBFBFC]" : ""
-                  }`}
-                  onClick={() => setSelectedSize(size.value)}
-                  style={{
-                    backgroundColor:
-                      selectedSize === size.value
-                        ? storeDetails.tanyaThemeColor
-                        : "transparent",
-                  }}
-                >
-                  {size.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null} */}
-
-        {/* Color */}
-        {/* {colorAttr ? (
-          <div className="mt-3 flex flex-col justify-between w-full text-gray-500">
-            <div className="text-[#323135] font-[600] font-nunitoSans">
-              Select Color
-            </div>
-            <div className="flex flex-row items-center gap-5 mt-3">
-              {colorAttr.values.map((color: any) => (
-                <div
-                  key={color.value}
-                  className={`w-[25px] h-[25px] rounded-full cursor-pointer ${
-                    selectedColor === color.value
-                      ? "border-2 border-[#6A70FF]"
-                      : ""
-                  }`}
-                  style={{
-                    backgroundColor: color.name?.toLowerCase() || "#ccc",
-                  }}
-                  onClick={() => setSelectedColor(color.value)}
-                  title={color.name}
-                ></div>
-              ))}
-            </div>
-          </div>
-        ) : null} */}
-
-        {/* Width */}
-        {/* {widthAttr ? (
-          <div className="mt-3 flex flex-col justify-between w-full text-gray-500">
-            <div className="text-[#323135] font-semibold font-nunitoSans">
-              Select Width
-            </div>
-            <div className="flex flex-row items-center gap-4 mt-3">
-              {widthAttr.values.map((width: any) => (
-                <div
-                  key={width.value}
-                  className={`border border-[#A7A5AF] text-[#323135] font-normal font-nunitoSans rounded-[6px] w-[40px] h-[30px] text-xs flex items-center justify-center cursor-pointer ${
-                    selectedWidth === width.value ? "text-[#FBFBFC]" : ""
-                  }`}
-                  onClick={() => setSelectedWidth(width.value)}
-                  style={{
-                    backgroundColor:
-                      selectedWidth === width.value
-                        ? storeDetails.tanyaThemeColor
-                        : "transparent",
-                  }}
-                >
-                  {width.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null} */}
-        {/* Description */}
         <div className="w-full text-left">
           <div className="text-[#323135] font-bold font-nunitoSans mt-3 text-[14px]">
             Product Details
