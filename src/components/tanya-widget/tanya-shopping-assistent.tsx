@@ -486,8 +486,7 @@ const TanyaShoppingAssistantStream = () => {
       if (customerData?.isGuest == false) {
         console.log("running secondary flow");
         runSecondaryFlow(productName.current, 0);
-      }
-      else{
+      } else {
         console.log("not running secondary flow");
       }
     }
@@ -500,6 +499,10 @@ const TanyaShoppingAssistantStream = () => {
       // Check if product and variants exist
       if (!productToBeAdded?.variants?.[0]?.product_id) {
         setAdding(false);
+        toast.error("Variants not found", {
+          position: "bottom-right",
+          autoClose: 1000,
+        });
         console.error("No product variant found");
         return;
       }
@@ -657,33 +660,7 @@ const TanyaShoppingAssistantStream = () => {
     } finally {
       notifySFCC();
     }
-
-    // try {
-    //   const cartId = localStorage.getItem("cartId");
-    //   const isLoggedIn = localStorage.getItem("isLoggedIn");
-    //   if (isLoggedIn === "true") {
-    //     const token = await getAccessToken();
-    //     if (cartId) {
-    //       await updateCart(cartId, [product] as any, token);
-    //     } else {
-    //       const newCartId = await addToCart([product] as any, token);
-    //       localStorage.setItem("cartId", newCartId);
-    //     }
-    //   } else {
-    //     localStorage.setItem("isNewCart", "true");
-    //   }
-    //   const cart = JSON.parse(localStorage.getItem("cart") || "[]") || [];
-    //   const newCart = cart.filter((c: Product) => c.id !== product.id);
-    //   newCart.push(product);
-    //   dispatch(addToCartAction(product as any));
-    //   toast.success("Product added to cart");
-    //   localStorage.setItem("cart", JSON.stringify(newCart));
-    // } catch (error) {
-    //   console.error("Error adding product to cart:", error);
-    //   toast.error("Something went wrong while adding to cart");
-    // } finally {
     setAdding(false);
-    // }
   };
 
   // Update the main container div's className
@@ -1090,12 +1067,15 @@ const TanyaShoppingAssistantStream = () => {
                                             : ""}
                                         </p>
 
-                                        <p className="mt-1 text-xs opacity-80">
-                                          You will earn{" "}
-                                          <strong>
-                                            {chat.productSnapshot.points} points
-                                          </strong>
-                                        </p>
+                                        {chat.productSnapshot.points > 0 && (
+                                          <p className="mt-1 text-xs opacity-80">
+                                            You will earn{" "}
+                                            <strong>
+                                              {chat.productSnapshot.points}{" "}
+                                              points
+                                            </strong>
+                                          </p>
+                                        )}
                                       </div>
 
                                       <div className="mt-3 flex items-center gap-3">
