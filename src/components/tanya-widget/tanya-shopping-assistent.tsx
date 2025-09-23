@@ -186,6 +186,7 @@ const TanyaShoppingAssistantStream = () => {
 
   const runSecondaryFlow = async (productTitle: string, points: number) => {
     const interests = await getInterests();
+    console.log(interests, "interests of customer");
     if (!interests) return;
     try {
       // surprise animation
