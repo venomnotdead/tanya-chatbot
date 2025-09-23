@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { Popover, PopoverTrigger } from "../ui/popover";
 // import tanyaChatBotIcon from "@/assets/tanya-chatbot/chat-with-tanya.png";
 // import { getAccessToken } from "../utils/getAccessToken";
-import { getSearchResults } from "../utils";
+import { getInterestApi, getProductById, getSearchResults } from "../utils";
 import type { SearchProduct } from "../graphQL/queries/types";
 import {
   // decryptData,
@@ -177,7 +177,11 @@ const TanyaShoppingAssistantStream = () => {
   };
 
   const getInterests = async () => {
-    return "Tops, Jeans, Earrings ordered on 12/07/2022. Sunglasses ordered on 11/05/2020.  Leather Shoes in the cart, Jacket in the wishlist";
+    const customer_id = JSON.parse(
+      sessionStorage.getItem("customerData") || "{}"
+    ).customerId;
+    const res = await getInterestApi(customer_id || "");
+    return res.c_interests;
   };
 
   const runSecondaryFlow = async (productTitle: string, points: number) => {
@@ -282,6 +286,12 @@ const TanyaShoppingAssistantStream = () => {
 
     setIsLoading(true);
     setInputText("");
+
+    productName.current = null;
+    productId.current = null;
+    productImage.current = null;
+    productPrice.current = null;
+
     setChatHistory((prev) => [
       ...prev,
       {
@@ -426,6 +436,7 @@ const TanyaShoppingAssistantStream = () => {
             const first = results[0] as any;
             productName.current = String(first?.product_name ?? "");
             productImage.current = first.image.link;
+            productId.current = first.product_id;
 
             // price
             const priceVal =
@@ -496,8 +507,9 @@ const TanyaShoppingAssistantStream = () => {
   const handleAddToCart = async (productToBeAdded: any, quantity: number) => {
     setAdding(true);
     try {
+      const product = await getProductById(productToBeAdded.id);
       // Check if product and variants exist
-      if (!productToBeAdded?.variants?.[0]?.product_id) {
+      if (!product?.variants?.[0]?.product_id) {
         setAdding(false);
         toast.error("Variants not found", {
           position: "bottom-right",
@@ -509,7 +521,7 @@ const TanyaShoppingAssistantStream = () => {
 
       const productData = [
         {
-          product_id: productToBeAdded.variants?.[0].product_id,
+          product_id: product.variants?.[0].product_id,
           quantity: quantity,
         },
       ];
@@ -631,6 +643,7 @@ const TanyaShoppingAssistantStream = () => {
         }
       }
     } catch (error: any) {
+      setAdding(false);
       console.error("Error adding to cart:", error);
       toast.error("Failed to add product to cart", {
         position: "bottom-right",
@@ -1143,14 +1156,14 @@ const TanyaShoppingAssistantStream = () => {
                                           </button>
                                         </div>
                                         <button
-                                          onClick={() =>
+                                          onClick={() => {
                                             handleAddToCart(
                                               mapSnapshotToProduct(
                                                 chat.productSnapshot!
                                               ),
                                               chat.productSnapshot!.quantity
-                                            )
-                                          }
+                                            );
+                                          }}
                                           disabled={adding}
                                           className="px-4 py-2 rounded-full font-medium"
                                           style={{
