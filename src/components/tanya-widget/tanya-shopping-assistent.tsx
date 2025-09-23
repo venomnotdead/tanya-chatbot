@@ -185,6 +185,7 @@ const TanyaShoppingAssistantStream = () => {
   };
 
   const runSecondaryFlow = async (productTitle: string, points: number) => {
+    console.log("in secondary flow");
     const interests = await getInterests();
     console.log(interests, "interests of customer");
     if (!interests) return;
