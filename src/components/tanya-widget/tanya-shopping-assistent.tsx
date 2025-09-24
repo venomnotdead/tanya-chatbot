@@ -185,9 +185,9 @@ const TanyaShoppingAssistantStream = () => {
   };
 
   const runSecondaryFlow = async (productTitle: string, points: number) => {
-    console.log("in secondary flow");
+    console.log("in secondary flow", VERSION);
     const interests = await getInterests();
-    console.log(interests, "interests of customer");
+    console.log(interests, "interests of customer", VERSION);
     if (!interests) return;
     try {
       // surprise animation
@@ -497,10 +497,10 @@ const TanyaShoppingAssistantStream = () => {
         sessionStorage.getItem("customerData") || "{}"
       );
       if (customerData?.isGuest == false) {
-        console.log("running secondary flow");
+        console.log("running secondary flow", VERSION);
         runSecondaryFlow(productName.current, 0);
       } else {
-        console.log("not running secondary flow");
+        console.log("not running secondary flow", VERSION);
       }
     }
     setProductLoading(false);
@@ -531,7 +531,7 @@ const TanyaShoppingAssistantStream = () => {
           quantity: quantity,
         },
       ];
-      console.log(productData, "product data");
+      console.log(productData, "product data", VERSION);
       // for getting customer id
       const customerData = JSON.parse(
         sessionStorage.getItem("customerData") || "{}"
