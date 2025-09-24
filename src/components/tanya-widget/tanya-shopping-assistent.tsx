@@ -531,7 +531,7 @@ const TanyaShoppingAssistantStream = () => {
           quantity: quantity,
         },
       ];
-      console.log(productData, "product data", VERSION);
+      console.log(productData, "product data", "app version", VERSION);
       // for getting customer id
       const customerData = JSON.parse(
         sessionStorage.getItem("customerData") || "{}"
