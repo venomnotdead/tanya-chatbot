@@ -511,7 +511,8 @@ const TanyaShoppingAssistantStream = () => {
     try {
       const product = await getProductById(productToBeAdded.id);
       // Check if product and variants exist
-      if (!product?.variants?.[0]?.product_id) {
+      console.log(product, "the product");
+      if (!product?.variants?.[0]?.product_id && !product.type.item) {
         setAdding(false);
         toast.error("Variants not found", {
           position: "bottom-right",
@@ -523,11 +524,11 @@ const TanyaShoppingAssistantStream = () => {
 
       const productData = [
         {
-          product_id: product.variants?.[0].product_id,
+          product_id: product.variants?.[0].product_id || product?.id,
           quantity: quantity,
         },
       ];
-
+      console.log(productData, "product data");
       // for getting customer id
       const customerData = JSON.parse(
         sessionStorage.getItem("customerData") || "{}"

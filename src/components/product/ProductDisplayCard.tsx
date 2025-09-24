@@ -38,20 +38,26 @@ const ProductDisplayCard = () => {
   // const { sizeAttr, colorAttr, widthAttr } = attributes;
 
   const addToCart = async () => {
+    console.log(product, "the prod");
     try {
       // Check if product and variants exist
-      if (!product?.variants?.[0]?.product_id) {
+
+      if (!product?.variants?.[0]?.product_id && !product.type.item) {
+         toast.error("Variants not available", {
+          position: "bottom-right",
+          autoClose: 1000,
+        });
         console.error("No product variant found");
         return;
       }
 
       const productData = [
         {
-          product_id: product.variants?.[0].product_id,
+          product_id: product.variants?.[0].product_id || product?.id,
           quantity: 1,
         },
       ];
-
+      console.log(productData, "the product data");
       // for getting customer id
       const customerData = JSON.parse(
         sessionStorage.getItem("customerData") || "{}"
@@ -77,7 +83,7 @@ const ProductDisplayCard = () => {
           console.error("Failed to get customer_token");
           return;
         }
-        const newExpiryTime = currentTime + 5 * 60 * 1000; 
+        const newExpiryTime = currentTime + 5 * 60 * 1000;
         setStoredToken(customer_token);
         localStorage.setItem(TOKEN_EXPIRY_KEY, newExpiryTime.toString());
 
