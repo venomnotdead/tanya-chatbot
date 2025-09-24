@@ -23,7 +23,7 @@ import { notifySFCC } from "../lib/utils";
 import { addProductToBasket, createBasket, fetchBasket } from "../api/api";
 import { fetchTokenBmGrant } from "../utils/fetchTokenBmGrant";
 import { fetchExistingGuestCustomerToken } from "../utils/fetchExistingRegisterCustomerToken";
-import { TOKEN_EXPIRY_KEY } from "../../config/constant";
+import { TOKEN_EXPIRY_KEY, VERSION } from "../../config/constant";
 import {
   getStoredBasketId,
   setStoredBasketId,
@@ -503,7 +503,7 @@ const TanyaShoppingAssistantStream = () => {
         console.log("not running secondary flow");
       }
     }
-    setProductLoading(true);
+    setProductLoading(false);
   };
 
   const handleAddToCart = async (productToBeAdded: any, quantity: number) => {
@@ -511,8 +511,11 @@ const TanyaShoppingAssistantStream = () => {
     try {
       const product = await getProductById(productToBeAdded.id);
       // Check if product and variants exist
-      console.log(product, "the product");
-      if (!product?.variants?.[0]?.product_id && !product.type.item) {
+      console.log(product, "the product", VERSION);
+      if (
+        !product?.variants?.[0]?.product_id &&
+        !(product.type.item || product.type.bundle)
+      ) {
         setAdding(false);
         toast.error("Variants not found", {
           position: "bottom-right",
@@ -583,6 +586,7 @@ const TanyaShoppingAssistantStream = () => {
                 draggable: true,
               });
               notifySFCC(basketIdFromCustomer);
+              setAdding(false);
               // window.location.reload();
             }
             return; // Skip basket creation
@@ -592,6 +596,7 @@ const TanyaShoppingAssistantStream = () => {
         // 2. If not valid, create new basket and store its ID in localStorage
         const basketResponse = await createBasket(customer_token);
         if (!basketResponse?.basket_id) {
+          setAdding(false);
           console.error("Failed to create basket");
           return;
         }
@@ -620,6 +625,7 @@ const TanyaShoppingAssistantStream = () => {
         const basketId = getStoredBasketId();
         if (!basketId) {
           console.error("No basket ID found");
+          setAdding(false);
           return;
         }
 
@@ -641,6 +647,7 @@ const TanyaShoppingAssistantStream = () => {
             pauseOnHover: true,
             draggable: true,
           });
+          setAdding(false);
           notifySFCC(basketId);
           // window.location.reload(); // Refresh page to update cart
         }
@@ -955,7 +962,7 @@ const TanyaShoppingAssistantStream = () => {
 
                         {/* Potential Questions */}
                         {chat.potentialQuestions.length > 0 && (
-                          <div className="my-2 mb-20 px-4 text-sm text-gray-700">
+                          <div className="my-2 px-4 text-sm text-gray-700">
                             <p
                               className="font-nunitoSans font-bold text-sm text-[#494949]"
                               style={{ color: storeDetails.themeDarkColor }}
@@ -983,21 +990,21 @@ const TanyaShoppingAssistantStream = () => {
                         {chat.secondaryLoading && (
                           <div className="mt-3 mb-4 px-4">
                             <div
-                              className="tanya-surprise-wrapper text-sm px-7 py-4 rounded-r-xl rounded-bl-2xl w-full relative overflow-hidden"
+                              className="tanya-surprise-wrapper bg-indigo-300 text-sm px-7 py-4 rounded-r-xl rounded-bl-2xl w-full relative overflow-hidden"
                               style={{
-                                backgroundColor:
-                                  storeDetails.tanyaThemeColorLight,
                                 margin: "0.75rem",
                               }}
                             >
-                              <div className="tanya-sparkle tanya-sparkle-1">
-                                ✨
-                              </div>
-                              <div className="tanya-sparkle tanya-sparkle-2">
-                                ✨
-                              </div>
-                              <div className="tanya-sparkle tanya-sparkle-3">
-                                ✨
+                              <div className="flex gap-1">
+                                <div className="tanya-sparkle tanya-sparkle-1">
+                                  ✨
+                                </div>
+                                <div className="tanya-sparkle tanya-sparkle-2">
+                                  ✨
+                                </div>
+                                <div className="tanya-sparkle tanya-sparkle-3">
+                                  ✨
+                                </div>
                               </div>
                               <div className="tanya-shimmer" />
                               <p
@@ -1188,6 +1195,7 @@ const TanyaShoppingAssistantStream = () => {
                             </div>
                           </>
                         )}
+                        <div className="mb-20"></div>
                       </div>
                     ))}
                   </div>
