@@ -174,16 +174,21 @@ const TanyaShoppingAssistantStream = () => {
       return null;
     }
   };
-//TODO need to uncomment for scapi
-  // const getAuthDetails = async () => {
-  //   const data = await authData(); // <- calls your async function
-  //   if (data == null) return;
-  //   setAuthDetails(data); // <- saves the result in state
-  // };
 
-  // useEffect(() => {
-  //   getAuthDetails();
-  // }, []);
+  const getAuthDetails = async () => {
+    const data = await authData(); // <- calls your async function
+    if (data == null) return;
+    setAuthDetails(data); // <- saves the result in state
+  };
+
+  useEffect(() => {
+    if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
+      getAuthDetails();
+      console.log("scapi environment");
+    } else {
+      console.log("ocapi environment");
+    }
+  }, []);
 
   const getInterests = async () => {
     const customer_id = JSON.parse(
@@ -421,7 +426,7 @@ const TanyaShoppingAssistantStream = () => {
   };
 
   const getKeywords = async (keywords: string[] | string) => {
-    console.log(authDetails?.access_token,'access_token');
+    console.log(authDetails?.access_token, "access_token");
     if (typeof keywords === "string") {
       const splitedKeywords = keywords.split(",");
       for (const keyword of splitedKeywords) {
@@ -465,7 +470,7 @@ const TanyaShoppingAssistantStream = () => {
       for (const keyword of keywords) {
         const results = await getSearchResults(
           keyword,
-authDetails?.access_token
+          authDetails?.access_token
         );
         setProductLoading(false);
         if (results?.length > 0) {

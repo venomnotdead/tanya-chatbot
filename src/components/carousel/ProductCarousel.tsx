@@ -150,7 +150,7 @@ const ProductCarousel = ({
                       )}
                     </p>
                     <p className="text-[#14121F] font-normal line-through text-sm font-nunitoSans">
-                      ${Number(prod?.price ?? 0) + 5}
+                      ${Number(prod?.price).toFixed(2) ?? 0 + 5}
                     </p>
                   </div>
                 </div>

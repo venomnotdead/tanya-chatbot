@@ -3,6 +3,7 @@ import axios from "axios";
 import { apiConfig } from "../../config/api";
 import { fetchTokenBmGrant } from "./fetchTokenBmGrant";
 import { fetchExistingGuestCustomerToken } from "./fetchExistingRegisterCustomerToken";
+import { authData } from "../../sfcc-apis/session";
 
 export const getHost = () => {
   const host = sessionStorage.getItem("Host");
@@ -15,13 +16,12 @@ export const getSiteId = () => {
 };
 
 export const getSearchResults = async (query: string, token: string) => {
-  const { serverUrl } = apiConfig();
+  const { serverUrl, basePath } = apiConfig();
 
   try {
     const host = getHost();
     const response = await axios.get(
-      `${serverUrl}api/search-sfcc?baseUrl=${host}&query=${query}&siteId=${getSiteId()}`,
-      // `${serverUrl}sc-api/search-sfcc?baseUrl=${host}&query=${query}`,
+      `${serverUrl}${basePath}/search-sfcc?baseUrl=${host}&query=${query}&siteId=${getSiteId()}`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -39,14 +39,15 @@ export const getSearchResults = async (query: string, token: string) => {
 
 export const getProductById = async (id: number | string) => {
   if (!id) throw new Error("Product ID is required");
-  const { serverUrl } = apiConfig();
+  const { serverUrl, basePath } = apiConfig();
   const host = getHost();
+  const { access_token } = await authData();
   const response = await axios.get(
-    `${serverUrl}api/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}`,
+    `${serverUrl}${basePath}/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}`,
     {
       headers: {
         "Content-Type": "application/json",
-        // Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${access_token}`,
       },
     }
   );
