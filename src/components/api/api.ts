@@ -1,4 +1,5 @@
 import { apiConfig } from "../../config/api";
+import { getHost } from "../utils";
 import { getAccessToken } from "../utils/getAccessToken";
 import axios from "axios";
 
@@ -33,7 +34,7 @@ export const createBasket = async (customer_token: string) => {
   const URL = `${serverUrl}`;
   try {
     const response = await axios.post(
-      `${URL}api/basket/create`,
+      `${URL}api/basket/create?baseUrl=${getHost()}`,
       {},
       {
         headers: {
@@ -66,7 +67,7 @@ export const addProductToBasket = async (
   const URL = `${serverUrl}`;
   try {
     const response = await axios.post(
-      `${URL}api/basket/add-product/${basketId}`,
+      `${URL}api/basket/add-product/${basketId}?baseUrl=${getHost()}`,
       products,
       {
         headers: {
@@ -104,7 +105,7 @@ export const fetchBasket = async ({
   const URL = `${serverUrl}`;
   try {
     const response = await axios.get(
-      `${URL}api/basket/${basketId}`,
+      `${URL}api/basket/${basketId}?baseUrl=${getHost()}`,
       {
         headers: {
           "Content-Type": "application/json",

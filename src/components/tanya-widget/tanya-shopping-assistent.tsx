@@ -14,9 +14,6 @@ import {
 import { useSearchParams } from "react-router-dom";
 import ProductDisplay from "../carousel/ProductDisplay";
 import { useSelector } from "react-redux";
-// import useSessionTracker from "../hooks/useSessionTracker";
-// import { fetchStoreConfig } from "../api/api";
-// import { setStore } from "../../store/reducers/storeReducer";
 import ProductDisplayCard from "../product/ProductDisplayCard";
 import { toast } from "react-toastify";
 import { notifySFCC } from "../lib/utils";
@@ -29,6 +26,7 @@ import {
   setStoredBasketId,
   setStoredToken,
 } from "../utils/localStorage";
+import { authData } from "../../sfcc-apis/session";
 
 type ProductSnapshot = {
   id: string;
@@ -62,6 +60,7 @@ const TanyaShoppingAssistantStream = () => {
   const productId = useRef<number | null>(null);
   const productImage = useRef<string | null>(null);
   const productPrice = useRef<number | null>(null);
+  const [authDetails, setAuthDetails] = useState<any>(null);
 
   const [searchParams] = useSearchParams();
   const [isOpen, setIsOpen] = useState(
@@ -175,6 +174,16 @@ const TanyaShoppingAssistantStream = () => {
       return null;
     }
   };
+
+  const getAuthDetails = async () => {
+    const data = await authData(); // <- calls your async function
+    if (data == null) return;
+    setAuthDetails(data); // <- saves the result in state
+  };
+
+  useEffect(() => {
+    getAuthDetails();
+  }, []);
 
   const getInterests = async () => {
     const customer_id = JSON.parse(
@@ -416,8 +425,8 @@ const TanyaShoppingAssistantStream = () => {
       const splitedKeywords = keywords.split(",");
       for (const keyword of splitedKeywords) {
         const results = await getSearchResults(
-          keyword
-          // storeDetails.searchConfigs
+          keyword,
+          authDetails.access_token
         );
         setProductLoading(false);
         if (results?.length > 0) {
@@ -1223,7 +1232,7 @@ const TanyaShoppingAssistantStream = () => {
                           }}
                         />
                         {/* Mic Icon */}
-                        <button
+                        {/* <button
                           type="button"
                           className="p-2 text-[#959595] hover:text-[#6952C7]"
                         >
@@ -1266,7 +1275,7 @@ const TanyaShoppingAssistantStream = () => {
                               </clipPath>
                             </defs>
                           </svg>
-                        </button>
+                        </button> */}
                         {/* Submit Button */}
                         <button
                           type="submit"

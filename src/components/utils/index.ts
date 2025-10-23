@@ -4,17 +4,22 @@ import { apiConfig } from "../../config/api";
 import { fetchTokenBmGrant } from "./fetchTokenBmGrant";
 import { fetchExistingGuestCustomerToken } from "./fetchExistingRegisterCustomerToken";
 
-export const getSearchResults = async (query: string) => {
-  // const token = await getAccessToken();
+export const getHost = () => {
+  const host = sessionStorage.getItem("Host");
+  return host;
+};
+
+export const getSearchResults = async (query: string, token: string) => {
   const { serverUrl } = apiConfig();
-  // if (!token) throw new Error("Failed to fetch token");
+
   try {
+    const host = getHost();
     const response = await axios.get(
-      `${serverUrl}api/search-sfcc?query=${query}`,
+      `${serverUrl}sc-api/search-sfcc?baseUrl=${host}&query=${query}`,
       {
         headers: {
           "Content-Type": "application/json",
-          // Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       }
     );
@@ -29,13 +34,16 @@ export const getSearchResults = async (query: string) => {
 export const getProductById = async (id: number | string) => {
   if (!id) throw new Error("Product ID is required");
   const { serverUrl } = apiConfig();
-
-  const response = await axios.get(`${serverUrl}api/product-sfcc/${id}`, {
-    headers: {
-      "Content-Type": "application/json",
-      // Authorization: `Bearer ${token}`,
-    },
-  });
+  const host = getHost();
+  const response = await axios.get(
+    `${serverUrl}api/product-sfcc/${id}?baseUrl=${host}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        // Authorization: `Bearer ${token}`,
+      },
+    }
+  );
 
   return response.data;
 };
@@ -50,7 +58,7 @@ export const getInterestApi = async (customerId: any) => {
   const { serverUrl } = apiConfig();
 
   const response = await axios.get(
-    `${serverUrl}api/get-interest?customerId=${customerId}`,
+    `${serverUrl}api/get-interest?baseUrl=${getHost()}&customerId=${customerId}`,
     {
       headers: {
         "Content-Type": "application/json",
