@@ -60,6 +60,7 @@ const ProductCarousel = ({
   };
 
   const getProduct = async (id: number | string) => {
+    console.log('calling get product');
     const product = await getProductById(id);
     dispatch(setProduct(product));
   };
@@ -82,11 +83,10 @@ const ProductCarousel = ({
             .slice(startIndex, startIndex + productsPerPage)
             .map((prod) => (
               <div
-                key={prod.product_id}
+                key={prod.productId}
                 className="flex-shrink-0 flex flex-col w-[150px] h-[200px] p-2 items-center justify-between cursor-pointer bg-[#FFFFFF] rounded-[10px] shadow-[0px_2px_2px_0px_#9292BC40]"
                 onClick={() => {
-                  // navigate(`/product/${prod.id}?category=${prod.category}`);
-                  getProduct(prod.product_id || "");
+                  getProduct(prod.product_id ?? prod.productId);
                 }}
               >
                 {/* Image */}
@@ -97,7 +97,7 @@ const ProductCarousel = ({
                       imageUrlArray(prod)[0] || // fallback if it's a string
                       "https://via.placeholder.com/120"
                     }
-                    alt={prod?.title ? prod.title : "Product"}
+                    alt={prod?.productName ? prod.productName : "Product"}
                     className="w-28 h-28 rounded-[10px] transition-transform duration-300 hover:scale-125 object-cover"
                   />
                 </div>
@@ -109,8 +109,8 @@ const ProductCarousel = ({
                 >
                   <div className="relative inline-block group">
                     <div className="w-full line-clamp-1 overflow-hidden text-ellipsis text-[#000000] font-medium font-nunitoSans">
-                      {prod?.title
-                        ? prod.title
+                      {prod?.productName
+                        ? prod.productName
                         : prod?.product_name
                         ? prod.product_name
                         : stringReducer(
@@ -130,8 +130,8 @@ const ProductCarousel = ({
                         zIndex: 50,
                       }}
                     >
-                      {prod?.title
-                        ? prod.title
+                      {prod?.productName
+                        ? prod.productName
                         : prod?.product_name
                         ? prod.product_name
                         : stringReducer(
@@ -150,7 +150,7 @@ const ProductCarousel = ({
                       )}
                     </p>
                     <p className="text-[#14121F] font-normal line-through text-sm font-nunitoSans">
-                      ${Number(prod?.price ?? 0) + 5}
+                      ${Number(prod?.price).toFixed(2) ?? 0 + 5}
                     </p>
                   </div>
                 </div>

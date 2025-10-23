@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getHost, getSiteId } from ".";
 
 interface Customer {
   access_token: string;
@@ -20,7 +21,7 @@ export const fetchExistingRegisterCustomerToken = async ({
   const URL = `${import.meta.env.VITE_SERVER_BASE_URL}`;
   try {
     const response = await axios.post(
-      `${URL}api/auth/token-existing-register-customer/${customerId}`,
+      `${URL}api/auth/token-existing-register-customer/${customerId}?baseUrl=${getHost()}&siteId=${getSiteId()}`,
       {},
       {
         headers: {
@@ -53,14 +54,13 @@ export const fetchExistingGuestCustomerToken = async (
     const dwsid = JSON.parse(sessionStorage.getItem("customerData")|| "{}").dwsid // fetch cookie
 
     const response = await axios.post(
-      `${URL}api/auth/token-existing-guest-customer?dwsid=${dwsid}`,
+      `${URL}api/auth/token-existing-guest-customer?dwsid=${dwsid}&baseUrl=${getHost()}&siteId=${getSiteId()}`,
       {},
       {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${access_token}`,
         },
-        // withCredentials: true, // ensures cookies are respected in CORS
       }
     );
 

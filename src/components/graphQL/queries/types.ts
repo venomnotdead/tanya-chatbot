@@ -115,12 +115,13 @@ export interface SearchProduct {
   _tags: string[];
   variants: Variant[];
   objectID: string;
-  title?: string;
+  productName?: string;
   price?: string;
   categoryId?: string;
   id?: number,
-  product_id?: number | string,
+  productId?: string,
   category?: string, 
+  product_id: string,
 }
 
 export type UpdatePaymentType = {

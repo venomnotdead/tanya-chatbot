@@ -123,8 +123,9 @@ export async function createSignedHeaders(
 export const apiConfig = () => {
   const aiConversationUrl = `https://mdv3qwfi2j.execute-api.us-east-1.amazonaws.com/dev/api/bedrock/invoke/stream`;
   const xAPIKey = "BJBtjpPkqGatuoa3qJqdR8aHXSsHkgvGaootbubi";
-  const serverUrl = "https://tanya-sfcc-server.vercel.app/";
-  // const serverUrl = "http://localhost:4001/";
+  // const serverUrl = "https://tanya-sfcc-server.vercel.app/";
+  const serverUrl = import.meta.env.VITE_SERVER_BASE_URL;
+  const basePath = import.meta.env.VITE_SCAPI_ENVIRONMENT ? "sc-api" : "api";
 
-  return { aiConversationUrl, xAPIKey, serverUrl };
+  return { aiConversationUrl, xAPIKey, serverUrl, basePath };
 };

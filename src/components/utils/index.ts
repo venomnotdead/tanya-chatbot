@@ -3,18 +3,29 @@ import axios from "axios";
 import { apiConfig } from "../../config/api";
 import { fetchTokenBmGrant } from "./fetchTokenBmGrant";
 import { fetchExistingGuestCustomerToken } from "./fetchExistingRegisterCustomerToken";
+import { authData } from "../../sfcc-apis/session";
 
-export const getSearchResults = async (query: string) => {
-  // const token = await getAccessToken();
-  const { serverUrl } = apiConfig();
-  // if (!token) throw new Error("Failed to fetch token");
+export const getHost = () => {
+  const host = sessionStorage.getItem("Host");
+  return host;
+};
+
+export const getSiteId = () => {
+  const siteId = sessionStorage.getItem("SiteId");
+  return siteId;
+};
+
+export const getSearchResults = async (query: string, token: string) => {
+  const { serverUrl, basePath } = apiConfig();
+
   try {
+    const host = getHost();
     const response = await axios.get(
-      `${serverUrl}api/search-sfcc?query=${query}`,
+      `${serverUrl}${basePath}/search-sfcc?baseUrl=${host}&query=${query}&siteId=${getSiteId()}`,
       {
         headers: {
           "Content-Type": "application/json",
-          // Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       }
     );
@@ -28,14 +39,18 @@ export const getSearchResults = async (query: string) => {
 
 export const getProductById = async (id: number | string) => {
   if (!id) throw new Error("Product ID is required");
-  const { serverUrl } = apiConfig();
-
-  const response = await axios.get(`${serverUrl}api/product-sfcc/${id}`, {
-    headers: {
-      "Content-Type": "application/json",
-      // Authorization: `Bearer ${token}`,
-    },
-  });
+  const { serverUrl, basePath } = apiConfig();
+  const host = getHost();
+  const { access_token } = await authData();
+  const response = await axios.get(
+    `${serverUrl}${basePath}/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${access_token}`,
+      },
+    }
+  );
 
   return response.data;
 };
@@ -50,7 +65,7 @@ export const getInterestApi = async (customerId: any) => {
   const { serverUrl } = apiConfig();
 
   const response = await axios.get(
-    `${serverUrl}api/get-interest?customerId=${customerId}`,
+    `${serverUrl}api/get-interest?baseUrl=${getHost()}&customerId=${customerId}&siteId=${getSiteId()}`,
     {
       headers: {
         "Content-Type": "application/json",
