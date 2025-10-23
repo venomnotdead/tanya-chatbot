@@ -86,7 +86,7 @@ const ProductCarousel = ({
                 key={prod.productId}
                 className="flex-shrink-0 flex flex-col w-[150px] h-[200px] p-2 items-center justify-between cursor-pointer bg-[#FFFFFF] rounded-[10px] shadow-[0px_2px_2px_0px_#9292BC40]"
                 onClick={() => {
-                  getProduct(prod.productId || "");
+                  getProduct(prod.product_id ?? prod.productId);
                 }}
               >
                 {/* Image */}

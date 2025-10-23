@@ -9,13 +9,19 @@ export const getHost = () => {
   return host;
 };
 
+export const getSiteId = () => {
+  const siteId = sessionStorage.getItem("SiteId");
+  return siteId;
+};
+
 export const getSearchResults = async (query: string, token: string) => {
   const { serverUrl } = apiConfig();
 
   try {
     const host = getHost();
     const response = await axios.get(
-      `${serverUrl}sc-api/search-sfcc?baseUrl=${host}&query=${query}`,
+      `${serverUrl}api/search-sfcc?baseUrl=${host}&query=${query}&siteId=${getSiteId()}`,
+      // `${serverUrl}sc-api/search-sfcc?baseUrl=${host}&query=${query}`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -36,7 +42,7 @@ export const getProductById = async (id: number | string) => {
   const { serverUrl } = apiConfig();
   const host = getHost();
   const response = await axios.get(
-    `${serverUrl}api/product-sfcc/${id}?baseUrl=${host}`,
+    `${serverUrl}api/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}`,
     {
       headers: {
         "Content-Type": "application/json",
@@ -58,7 +64,7 @@ export const getInterestApi = async (customerId: any) => {
   const { serverUrl } = apiConfig();
 
   const response = await axios.get(
-    `${serverUrl}api/get-interest?baseUrl=${getHost()}&customerId=${customerId}`,
+    `${serverUrl}api/get-interest?baseUrl=${getHost()}&customerId=${customerId}&siteId=${getSiteId()}`,
     {
       headers: {
         "Content-Type": "application/json",
