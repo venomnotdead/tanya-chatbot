@@ -2,6 +2,9 @@ import axios from "axios";
 import { apiConfig } from "../../config/api";
 
 export async function authData() {
+  if(!import.meta.env.VITE_SCAPI_ENVIRONMENT){
+    return "";
+  }
   const expires_in = localStorage.getItem("expires_in");
   const access_token = localStorage.getItem("access_token");
   if (
@@ -20,6 +23,7 @@ export async function authData() {
     sessionStorage.getItem("customerData") || "{}"
   ).isGuest;
   const customerMail = "vaidikchauhan333@gmail.com";
+  //TODO - get real data from session
   //   JSON.parse(
   //     sessionStorage.getItem('customerData') || '{}'
   //   ).customerMail;
