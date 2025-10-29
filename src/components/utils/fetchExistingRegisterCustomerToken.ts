@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getHost, getSiteId } from ".";
+import { clientId, getHost, getSiteId, organisationId, shortCode } from ".";
 
 interface Customer {
   access_token: string;
@@ -21,7 +21,7 @@ export const fetchExistingRegisterCustomerToken = async ({
   const URL = `${import.meta.env.VITE_SERVER_BASE_URL}`;
   try {
     const response = await axios.post(
-      `${URL}api/auth/token-existing-register-customer/${customerId}?baseUrl=${getHost()}&siteId=${getSiteId()}`,
+      `${URL}api/auth/token-existing-register-customer/${customerId}?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
       {},
       {
         headers: {
@@ -54,7 +54,7 @@ export const fetchExistingGuestCustomerToken = async (
     const dwsid = JSON.parse(sessionStorage.getItem("customerData")|| "{}").dwsid // fetch cookie
 
     const response = await axios.post(
-      `${URL}api/auth/token-existing-guest-customer?dwsid=${dwsid}&baseUrl=${getHost()}&siteId=${getSiteId()}`,
+      `${URL}api/auth/token-existing-guest-customer?dwsid=${dwsid}&baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
       {},
       {
         headers: {

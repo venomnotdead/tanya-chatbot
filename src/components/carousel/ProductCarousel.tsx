@@ -60,7 +60,6 @@ const ProductCarousel = ({
   };
 
   const getProduct = async (id: number | string) => {
-    console.log('calling get product');
     const product = await getProductById(id);
     dispatch(setProduct(product));
   };
@@ -149,7 +148,7 @@ const ProductCarousel = ({
                         priceFormatter(prod)?.currencyCode
                       )}
                     </p>
-                    <p className="text-[#14121F] font-normal line-through text-sm font-nunitoSans">
+                    <p className="text-[#14121F] font-normal line-through text-sm font-nunitoSans truncate">
                       ${Number(prod?.price).toFixed(2) ?? 0 + 5}
                     </p>
                   </div>

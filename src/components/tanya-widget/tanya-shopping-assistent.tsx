@@ -339,8 +339,8 @@ const TanyaShoppingAssistantStream = () => {
       const invokeUrl = `https://tanya.aspiresystems.com/api/bedrock/invoke/stream?${queryParams.toString()}`;
 
       const payload = JSON.stringify({
-        flowId: "3LUE6PX8GT",
-        flowAliasId: "TCCHAXPM1A",
+        flowId: "MMHQKYI1NE",
+        flowAliasId: "SZF9ZK1ATE",
         input: {
           userPrompt: newQuery,
           whom: sanitizedWhom,
@@ -393,7 +393,9 @@ const TanyaShoppingAssistantStream = () => {
                           ? "response"
                           : parsedData.index == 1
                           ? "keywords"
-                          : "potentialQuestions"]: parsedData.data,
+                          : parsedData.index == 2
+                          ? "potentialQuestions"
+                          : "end"]: parsedData.data,
                       }
                     : msg
                 )
@@ -428,6 +430,7 @@ const TanyaShoppingAssistantStream = () => {
   const getKeywords = async (keywords: string[] | string) => {
     console.log(authDetails?.access_token, "access_token");
     if (typeof keywords === "string") {
+      console.log(keywords, "keywords");
       const splitedKeywords = keywords.split(",");
       for (const keyword of splitedKeywords) {
         const results = await getSearchResults(
@@ -525,10 +528,11 @@ const TanyaShoppingAssistantStream = () => {
     setAdding(true);
     try {
       const product = await getProductById(productToBeAdded.id);
-      // Check if product and variants exist
-      console.log(product, "the product", VERSION);
       if (
-        !product?.variants?.[0]?.product_id &&
+        !(
+          product?.variants?.[0]?.product_id ||
+          product?.variants?.[0]?.productId
+        ) &&
         !(product.type.item || product.type.bundle)
       ) {
         setAdding(false);
@@ -542,7 +546,10 @@ const TanyaShoppingAssistantStream = () => {
 
       const productData = [
         {
-          product_id: product.variants?.[0].product_id || product?.id,
+          product_id:
+            product.variants?.[0].product_id ||
+            product.variants?.[0].productId ||
+            product?.id,
           quantity: quantity,
         },
       ];
@@ -564,10 +571,12 @@ const TanyaShoppingAssistantStream = () => {
       ) {
         const access_token = await fetchTokenBmGrant();
 
-        const { customer_token } = await fetchExistingGuestCustomerToken(
+        let { customer_token } = await fetchExistingGuestCustomerToken(
           access_token
         );
-
+        if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
+          customer_token = "Bearer " + authDetails.access_token;
+        }
         if (!customer_token) {
           console.error("Failed to get customer_token");
           return;
@@ -609,22 +618,55 @@ const TanyaShoppingAssistantStream = () => {
         }
 
         // 2. If not valid, create new basket and store its ID in localStorage
-        const basketResponse = await createBasket(customer_token);
-        if (!basketResponse?.basket_id) {
+        const data = {
+          productItems: [
+            {
+              productId:
+                product.variants?.[0].product_id ||
+                product.variants?.[0].productId ||
+                product?.id,
+              quantity: 1,
+            },
+          ],
+        };
+        const basketResponse = await createBasket(customer_token, data);
+        console.log(
+          basketResponse,
+          basketResponse?.basket_id,
+          basketResponse?.basketId,
+          "the basket response"
+        );
+        if (!(basketResponse?.basket_id || !basketResponse?.basketId)) {
           setAdding(false);
           console.error("Failed to create basket");
           return;
         }
+        // else if (basketResponse?.basketId) {
+        //   toast.success(`Added to cart`, {
+        //     position: "bottom-right",
+        //     autoClose: 3000,
+        //     hideProgressBar: false,
+        //     closeOnClick: true,
+        //     pauseOnHover: true,
+        //     draggable: true,
+        //   });
+        // }
 
         // Store new basket ID
-        setStoredBasketId(basketResponse.basket_id);
+        setStoredBasketId(
+          basketResponse?.basket_id || basketResponse?.basketId
+        );
         // Add product to new basket
+        // if (!import.meta.env.VITE_SCAPI_ENVIRONMENT) {
         const response = await addProductToBasket(
-          basketResponse.basket_id,
+          basketResponse?.basket_id || basketResponse?.basketId,
           productData,
           customer_token
         );
-        if (response?.product_items?.length > 0) {
+        if (
+          response?.product_items?.length > 0 ||
+          response?.productItems?.length > 0
+        ) {
           toast.success(`Added to cart`, {
             position: "bottom-right",
             autoClose: 3000,
@@ -633,8 +675,9 @@ const TanyaShoppingAssistantStream = () => {
             pauseOnHover: true,
             draggable: true,
           });
-          notifySFCC(basketResponse.basket_id);
         }
+        notifySFCC(basketResponse.basket_id || basketResponse?.basketId);
+        // }
       } else {
         // Use existing customer_token and basket ID
         const basketId = getStoredBasketId();
@@ -650,10 +693,6 @@ const TanyaShoppingAssistantStream = () => {
           customer_token
         );
         if (response?.product_items?.length > 0) {
-          // const addedProduct = response.product_items.at(-1);
-          // const addedProduct = response.product_items[response.product_items.length - 1];
-          // addedProduct.product_name;
-          // addedProduct.product_id;
           toast.success(`Added to cart`, {
             position: "bottom-right",
             autoClose: 3000,
@@ -664,7 +703,6 @@ const TanyaShoppingAssistantStream = () => {
           });
           setAdding(false);
           notifySFCC(basketId);
-          // window.location.reload(); // Refresh page to update cart
         }
       }
     } catch (error: any) {
@@ -1231,6 +1269,7 @@ const TanyaShoppingAssistantStream = () => {
                           className="flex-1 bg-[#FFFFFF] text-[#232323] outline-none border-none px-2 py-2 text-sm"
                           placeholder="How can I help you..."
                           value={inputText}
+                          autoFocus
                           onChange={(e) => setInputText(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !isLoading)

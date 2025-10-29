@@ -20,6 +20,7 @@ import {
   fetchExistingGuestCustomerToken,
 } from "../utils/fetchExistingRegisterCustomerToken";
 import { notifySFCC } from "../lib/utils";
+import { authData } from "../../sfcc-apis/session";
 
 const ANIMATION_DURATION = 300; // ms
 
@@ -42,8 +43,12 @@ const ProductDisplayCard = () => {
     try {
       // Check if product and variants exist
 
-      if (!product?.variants?.[0]?.product_id && !product.type.item) {
-         toast.error("Variants not available", {
+      if (
+        !product?.variants?.[0]?.product_id &&
+        !(product.type.item || product.type.bundle) &&
+        !product?.variants?.[0]?.productId
+      ) {
+        toast.error("Variants not available", {
           position: "bottom-right",
           autoClose: 1000,
         });
@@ -53,7 +58,10 @@ const ProductDisplayCard = () => {
 
       const productData = [
         {
-          product_id: product.variants?.[0].product_id || product?.id,
+          product_id:
+            product.variants?.[0].product_id ||
+            product.variants?.[0].productId ||
+            product?.id,
           quantity: 1,
         },
       ];
@@ -73,12 +81,19 @@ const ProductDisplayCard = () => {
         !tokenExpiry ||
         currentTime >= parseInt(tokenExpiry)
       ) {
-        const access_token = await fetchTokenBmGrant();
-
-        const { customer_token } = await fetchExistingGuestCustomerToken(
-          access_token
-        );
-
+        let customer_token = "";
+        if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
+          const authDetails = await authData();
+          console.log("token from auth data");
+          customer_token = "Bearer " + authDetails.access_token;
+        } else {
+          console.log("token from bm grant");
+          const access_token = await fetchTokenBmGrant();
+          const customerTokenData = await fetchExistingGuestCustomerToken(
+            access_token
+          );
+          customer_token = customerTokenData.customer_token;
+        }
         if (!customer_token) {
           console.error("Failed to get customer_token");
           return;
@@ -93,6 +108,7 @@ const ProductDisplayCard = () => {
             basketId: basketIdFromCustomer,
             customer_token,
           });
+          console.log(basketIdFromCustomer, "basket id from customer");
           if (fetchBasketResponse.status === 200 && fetchBasketResponse) {
             // Use this basketId to add product
 
@@ -101,7 +117,10 @@ const ProductDisplayCard = () => {
               productData,
               customer_token
             );
-            if (response?.product_items?.length > 0) {
+            if (
+              response?.product_items?.length > 0 ||
+              response?.productItems?.length > 0
+            ) {
               // const addedProduct = response.product_items.at(-1);
               toast.success(`Added to cart`, {
                 position: "bottom-right",
@@ -119,21 +138,59 @@ const ProductDisplayCard = () => {
         }
 
         // 2. If not valid, create new basket and store its ID in localStorage
-        const basketResponse = await createBasket(customer_token);
-        if (!basketResponse?.basket_id) {
+        const data = {
+          productItems: [
+            {
+              productId:
+                product.variants?.[0].product_id ||
+                product.variants?.[0].productId ||
+                product?.id,
+              quantity: 1,
+            },
+          ],
+        };
+        console.log("before create basket");
+        const basketResponse = await createBasket(customer_token, data);
+        console.log(
+          basketResponse,
+          basketResponse?.basket_id,
+          basketResponse?.basketId,
+          "the basket response"
+        );
+        if (!basketResponse?.basket_id && !basketResponse?.basketId) {
           console.error("Failed to create basket");
           return;
         }
-
-        // Store new basket ID
-        setStoredBasketId(basketResponse.basket_id);
+        console.log(
+          "setting stored id",
+          basketResponse?.basket_id || basketResponse?.basketId
+        );
+        // else if (basketResponse?.basketId) {
+        //   toast.success(`Added to cart`, {
+        //     position: "bottom-right",
+        //     autoClose: 3000,
+        //     hideProgressBar: false,
+        //     closeOnClick: true,
+        //     pauseOnHover: true,
+        //     draggable: true,
+        //   });
+        // }
+        setStoredBasketId(
+          basketResponse?.basket_id || basketResponse?.basketId
+        );
         // Add product to new basket
+        // if (!import.meta.env.VITE_SCAPI_ENVIRONMENT) {
+        console.log("adding product to basket");
         const response = await addProductToBasket(
-          basketResponse.basket_id,
+          basketResponse?.basket_id || basketResponse?.basketId,
           productData,
           customer_token
         );
-        if (response?.product_items?.length > 0) {
+        console.log("object added to basket");
+        if (
+          response?.product_items?.length > 0 ||
+          response?.productItems?.length > 0
+        ) {
           toast.success(`Added to cart`, {
             position: "bottom-right",
             autoClose: 3000,
@@ -142,8 +199,9 @@ const ProductDisplayCard = () => {
             pauseOnHover: true,
             draggable: true,
           });
-          notifySFCC(basketResponse.basket_id);
         }
+        notifySFCC(basketResponse.basket_id || basketResponse?.basketId);
+        // }
       } else {
         // Use existing customer_token and basket ID
         const basketId = getStoredBasketId();
@@ -158,10 +216,6 @@ const ProductDisplayCard = () => {
           customer_token
         );
         if (response?.product_items?.length > 0) {
-          // const addedProduct = response.product_items.at(-1);
-          // const addedProduct = response.product_items[response.product_items.length - 1];
-          // addedProduct.product_name;
-          // addedProduct.product_id;
           toast.success(`Added to cart`, {
             position: "bottom-right",
             autoClose: 3000,
@@ -171,7 +225,6 @@ const ProductDisplayCard = () => {
             draggable: true,
           });
           notifySFCC(basketId);
-          // window.location.reload(); // Refresh page to update cart
         }
       }
     } catch (error: any) {
@@ -212,7 +265,7 @@ const ProductDisplayCard = () => {
 
     window.location.href = product.c_pdpUrl; //redirect to sfcc product details url
   };
-
+  console.log(product, "the prod");
   return (
     <>
       <div
@@ -262,27 +315,30 @@ const ProductDisplayCard = () => {
           <div className="flex flex-row items-center justify-center  w-[120px] h-[120px] my-5">
             <img
               src={
-                product.image_groups?.[0]?.images?.[0]?.link ||
-                "https://via.placeholder.com/120"
+                import.meta.env.VITE_SCAPI_ENVIRONMENT
+                  ? product.imageGroups?.[0]?.images?.[0]?.link
+                  : product.image_groups?.[0]?.images?.[0]?.link ||
+                    "https://via.placeholder.com/120"
               }
               alt={product.name}
               className="rounded-[10px]"
             />
           </div>
           <div className="flex flex-col items-center gap-2">
-            {product.image_groups
+            {(import.meta.env.VITE_SCAPI_ENVIRONMENT
+              ? product.imageGroups
+              : product.image_groups
+            )
               .slice(1, 2)
               .map((group: any) =>
-                group.images
-                  .slice(0, 3)
-                  .map((image: any) => (
-                    <img
-                      key={image.link}
-                      src={image.link}
-                      alt={product.name}
-                      className="rounded-[10px] w-[60px] h-[60px]"
-                    />
-                  ))
+                group.images.slice(1, 2).map((image: any) => (
+                  <img
+                    key={image.link}
+                    src={image.link}
+                    alt={product.name}
+                    className="rounded-[10px] w-[60px] h-[60px]"
+                  />
+                ))
               )}
           </div>
         </div>
@@ -312,7 +368,7 @@ const ProductDisplayCard = () => {
           </div>
           <div
             className="text-[#68656E] font-normal font-nunitoSans text-xs pl-2 mt-3"
-            dangerouslySetInnerHTML={{ __html: product.short_description }}
+            dangerouslySetInnerHTML={{ __html: product.short_description || product.longDescription }}
           ></div>
         </div>
         {/* rating and reviews */}
