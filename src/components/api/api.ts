@@ -1,5 +1,5 @@
 import { apiConfig } from "../../config/api";
-import { getHost, getSiteId } from "../utils";
+import { clientId, getHost, getSiteId, organisationId, shortCode } from "../utils";
 import { getAccessToken } from "../utils/getAccessToken";
 import axios from "axios";
 
@@ -29,13 +29,14 @@ interface Product {
   quantity: number;
 }
 
-export const createBasket = async (customer_token: string) => {
-  const { serverUrl } = apiConfig();
+export const createBasket = async (customer_token: string, data?: any) => {
+  const { serverUrl, basePath } = apiConfig();
   const URL = `${serverUrl}`;
+  console.log("customer_token \n", customer_token);
   try {
     const response = await axios.post(
-      `${URL}api/basket/create?baseUrl=${getHost()}&siteId=${getSiteId()}`,
-      {},
+      `${URL}${basePath}/basket/create?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
+      data,
       {
         headers: {
           "Content-Type": "application/json",
@@ -44,10 +45,7 @@ export const createBasket = async (customer_token: string) => {
       }
     );
 
-    if (response.status === 201 && response.data) {
-      return response.data;
-    }
-    return null;
+    return response.data;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error("Error creating basket:", error.response || error.message);
@@ -63,11 +61,11 @@ export const addProductToBasket = async (
   products: Product[],
   customer_token: string
 ) => {
-  const { serverUrl } = apiConfig();
+  const { serverUrl, basePath } = apiConfig();
   const URL = `${serverUrl}`;
   try {
     const response = await axios.post(
-      `${URL}api/basket/add-product/${basketId}?baseUrl=${getHost()}&siteId=${getSiteId()}`,
+      `${URL}${basePath}/basket/add-product/${basketId}?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
       products,
       {
         headers: {
@@ -101,11 +99,11 @@ export const fetchBasket = async ({
   basketId: string;
   customer_token: string;
 }) => {
-  const { serverUrl } = apiConfig();
+  const { serverUrl, basePath } = apiConfig();
   const URL = `${serverUrl}`;
   try {
     const response = await axios.get(
-      `${URL}api/basket/${basketId}?baseUrl=${getHost()}&siteId=${getSiteId()}`,
+      `${URL}${basePath}/basket/${basketId}?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
       {
         headers: {
           "Content-Type": "application/json",

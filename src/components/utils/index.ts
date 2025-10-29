@@ -15,13 +15,28 @@ export const getSiteId = () => {
   return siteId;
 };
 
+export const clientId = () => {
+  const clientId = sessionStorage.getItem("pubCfg");
+  return clientId;
+};
+
+export const shortCode = () => {
+  const shortCode = sessionStorage.getItem("envRef");
+  return shortCode;
+};
+
+export const organisationId = () => {
+  const orgRef = sessionStorage.getItem("orgRef");
+  return orgRef;
+};
+
 export const getSearchResults = async (query: string, token: string) => {
   const { serverUrl, basePath } = apiConfig();
 
   try {
     const host = getHost();
     const response = await axios.get(
-      `${serverUrl}${basePath}/search-sfcc?baseUrl=${host}&query=${query}&siteId=${getSiteId()}`,
+      `${serverUrl}${basePath}/search-sfcc?baseUrl=${host}&query=${query}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -41,9 +56,11 @@ export const getProductById = async (id: number | string) => {
   if (!id) throw new Error("Product ID is required");
   const { serverUrl, basePath } = apiConfig();
   const host = getHost();
+  console.log("calling access");
   const { access_token } = await authData();
+  console.log(access_token);
   const response = await axios.get(
-    `${serverUrl}${basePath}/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}`,
+    `${serverUrl}${basePath}/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
     {
       headers: {
         "Content-Type": "application/json",
@@ -62,14 +79,18 @@ export const getInterestApi = async (customerId: any) => {
   const { customer_token } = await fetchExistingGuestCustomerToken(
     access_token
   );
-  const { serverUrl } = apiConfig();
+  const { serverUrl, basePath } = apiConfig();
+  const data = await authData();
+  const token = data.access_token;
 
   const response = await axios.get(
-    `${serverUrl}api/get-interest?baseUrl=${getHost()}&customerId=${customerId}&siteId=${getSiteId()}`,
+    `${serverUrl}${basePath}/get-interest?baseUrl=${getHost()}&customerId=${customerId}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
     {
       headers: {
         "Content-Type": "application/json",
-        Authorization: `${customer_token}`,
+        Authorization: import.meta.env.VITE_SCAPI_ENVIRONMENT
+          ? `Bearer ${token}`
+          : `${customer_token}`,
       },
     }
   );
