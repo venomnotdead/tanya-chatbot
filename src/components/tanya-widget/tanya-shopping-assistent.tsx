@@ -184,7 +184,7 @@ const TanyaShoppingAssistantStream = () => {
   useEffect(() => {
     if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
       getAuthDetails();
-      console.log("scapi environment");
+      console.log("scapi environment v1");
     } else {
       console.log("ocapi environment");
     }
