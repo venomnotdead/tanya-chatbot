@@ -70,7 +70,7 @@ const ProductCarousel = ({
         {product?.length > productsPerPage && (
           <button
             onClick={prevProducts}
-            className="absolute left-0 text-[#000000] bg-[#ffffff] rounded-full p-2 flex items-center h-fit"
+            className="absolute z-50 left-0 text-[#000000] bg-[#ffffff] rounded-full p-2 flex items-center h-fit"
             // style={{ color: storeDetails.tanyaThemeColor }}
           >
             <Icon icon="mdi:chevron-left" width="25" />
@@ -160,7 +160,7 @@ const ProductCarousel = ({
         {product?.length > productsPerPage && (
           <button
             onClick={nextProducts}
-            className="absolute right-0 text-[#000000] bg-[#ffffff] rounded-full p-2  flex items-center h-fit"
+            className="absolute z-50 right-0 text-[#000000] bg-[#ffffff] rounded-full p-2  flex items-center h-fit"
             // style={{ color: storeDetails.tanyaThemeColor }}
           >
             <Icon icon="mdi:chevron-right" width="25" />
