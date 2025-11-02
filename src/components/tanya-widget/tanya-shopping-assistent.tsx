@@ -11,7 +11,6 @@ import {
   formatStringToHtml,
   // priceFormatter,
 } from "../utils/helper";
-import { useSearchParams } from "react-router-dom";
 import ProductDisplay from "../carousel/ProductDisplay";
 import { useSelector } from "react-redux";
 import ProductDisplayCard from "../product/ProductDisplayCard";
@@ -62,9 +61,8 @@ const TanyaShoppingAssistantStream = () => {
   const productPrice = useRef<number | null>(null);
   const [authDetails, setAuthDetails] = useState<any>(null);
 
-  const [searchParams] = useSearchParams();
   const [isOpen, setIsOpen] = useState(
-    searchParams.get("shoppingassist") === "true"
+false
   );
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -857,7 +855,7 @@ const TanyaShoppingAssistantStream = () => {
                       </p>
                     </div>
                     <p
-                      className="text-[#5B5B5B] font-nunitoSans font-semibold italic"
+                      className="text-[#5B5B5B] font-nunitoSans font-semibold"
                       style={{ fontStyle: "italic" }}
                     >
                       {" "}

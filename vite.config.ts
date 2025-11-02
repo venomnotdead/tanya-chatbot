@@ -1,15 +1,24 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
   build: {
+    lib: {
+      entry: path.resolve(__dirname, 'src/index.js'),
+      name: 'TanyaShoppingAssistantStream',
+      fileName: (format) => `TanyaShoppingAssistantStream.${format}.js`,
+      formats: ['es', 'cjs']
+    },
     rollupOptions: {
+      external: ['react', 'react-dom'],
       output: {
-        entryFileNames: 'assets/app.js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/app.[ext]'
+        globals: {
+          react: 'React',
+          'react-dom': 'ReactDOM'
+        }
       }
     }
   }
-})
+});

@@ -1,13 +1,33 @@
 {
   "name": "tanya-chatbot",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.0.10",
+  "description": "Tanya chatbot widget - A reusable React chatbot component",
   "type": "module",
+  "main": "./dist/tanya-chatbot.cjs.js",
+  "module": "./dist/tanya-chatbot.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/tanya-chatbot.cjs.js",
+      "import": "./dist/tanya-chatbot.es.js"
+    },
+    "./styles.css": "./dist/style.css"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:lib": "tsc && vite build --config vite.config.lib.ts",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build:lib"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
     "@apollo/client": "^3.13.8",
@@ -18,13 +38,9 @@
     "axios": "^1.9.0",
     "buffer": "^6.0.3",
     "clsx": "^2.1.1",
-    "crypto": "^1.0.1",
     "crypto-js": "^4.2.0",
     "graphql": "^16.11.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
     "react-redux": "^9.2.0",
-    "react-router-dom": "^7.6.0",
     "react-toastify": "^11.0.5",
     "tailwind-merge": "^3.3.0",
     "tailwindcss-animate": "^1.0.7"
@@ -42,9 +58,25 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
     "postcss": "^8.4.49",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vite-plugin-dts": "^4.5.4"
+  },
+  "keywords": [
+    "react",
+    "chatbot",
+    "widget",
+    "component",
+    "tanya"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/tanya-chatbot.git"
   }
 }
