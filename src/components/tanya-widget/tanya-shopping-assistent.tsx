@@ -11,7 +11,6 @@ import {
   formatStringToHtml,
   // priceFormatter,
 } from "../utils/helper";
-import { useSearchParams } from "react-router-dom";
 import ProductDisplay from "../carousel/ProductDisplay";
 import { useSelector } from "react-redux";
 import ProductDisplayCard from "../product/ProductDisplayCard";
@@ -62,10 +61,7 @@ const TanyaShoppingAssistantStream = () => {
   const productPrice = useRef<number | null>(null);
   const [authDetails, setAuthDetails] = useState<any>(null);
 
-  const [searchParams] = useSearchParams();
-  const [isOpen, setIsOpen] = useState(
-    searchParams.get("shoppingassist") === "true"
-  );
+  const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [adding, setAdding] = useState<boolean>(false);
