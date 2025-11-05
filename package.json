@@ -1,6 +1,6 @@
 {
   "name": "tanya-chatbot",
-  "version": "0.0.10",
+  "version": "0.1.5",
   "description": "Tanya chatbot widget - A reusable React chatbot component",
   "type": "module",
   "main": "./dist/tanya-chatbot.cjs.js",
@@ -11,8 +11,7 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/tanya-chatbot.cjs.js",
       "import": "./dist/tanya-chatbot.es.js"
-    },
-    "./styles.css": "./dist/style.css"
+    }
   },
   "files": [
     "dist"

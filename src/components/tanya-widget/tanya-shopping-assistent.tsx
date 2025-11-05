@@ -36,7 +36,11 @@ type ProductSnapshot = {
   quantity: number;
 };
 
-const TanyaShoppingAssistantStream = () => {
+const TanyaShoppingAssistantStream = ({
+  tanyaConfig,
+}: {
+  tanyaConfig?: any;
+}) => {
   // Shopping options
   const shoppingOptions = [
     "Myself",
@@ -61,9 +65,7 @@ const TanyaShoppingAssistantStream = () => {
   const productPrice = useRef<number | null>(null);
   const [authDetails, setAuthDetails] = useState<any>(null);
 
-  const [isOpen, setIsOpen] = useState(
-false
-  );
+  const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [adding, setAdding] = useState<boolean>(false);
@@ -180,6 +182,14 @@ false
   };
 
   useEffect(() => {
+    if (tanyaConfig?.siteId) {
+      const { clientID, host, organizationID, shortCode, siteId } = tanyaConfig;
+      sessionStorage.setItem("Host", host);
+      sessionStorage.setItem("SiteId", siteId);
+      sessionStorage.setItem("pubCfg", btoa(clientID));
+      sessionStorage.setItem("envRef", shortCode);
+      sessionStorage.setItem("orgRef", organizationID);
+    }
     if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
       getAuthDetails();
       console.log("scapi environment v1");
@@ -748,9 +758,9 @@ false
               // background: storeDetails.tanyaThemeColor,
             }
           }
-          className="flex items-center rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+          className="flex items-center rounded-lg cursor-pointer hover:opacity-90 transition-opacity p-0"
         >
-          <div className="flex flex-col p-[5px]">
+          <div className="flex flex-col">
             <svg
               width="40"
               height="40"

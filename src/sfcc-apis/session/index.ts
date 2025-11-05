@@ -32,7 +32,10 @@ export async function authData() {
   try {
     const endpoint = isGuest ? "unregister-auth" : "register-auth";
     const res = await axios.get(
-      `${serverUrl}sc-api/${endpoint}?dwsid=${dwsid}&email=${customerMail}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}&siteId=${getSiteId()}`
+      `${serverUrl}sc-api/${endpoint}?dwsid=${dwsid}&email=${customerMail}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}&siteId=${getSiteId()}`,
+      {
+        withCredentials: true,
+      }
     );
     localStorage.setItem("access_token", res.data.access_token);
     localStorage.setItem(
