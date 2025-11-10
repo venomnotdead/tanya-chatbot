@@ -1,6 +1,11 @@
 import axios from "axios";
 import { apiConfig } from "../../config/api";
-import { clientId, getSiteId, organisationId, shortCode } from "../../components/utils";
+import {
+  clientId,
+  getSiteId,
+  organisationId,
+  shortCode,
+} from "../../components/utils";
 
 export async function authData() {
   if (!import.meta.env.VITE_SCAPI_ENVIRONMENT) {
@@ -8,14 +13,13 @@ export async function authData() {
   }
   const expires_in = localStorage.getItem("expires_in");
   const access_token = localStorage.getItem("access_token");
-  const isGuest = JSON.parse(
-    sessionStorage.getItem("customerData") || "{}"
-  ).isGuest;
+  const isGuest =
+    JSON.parse(sessionStorage.getItem("customerData") || "{}")?.isGuest || true;
   if (
     expires_in &&
     access_token &&
     new Date().getTime() < parseInt(expires_in) &&
-    isGuest === JSON.parse(localStorage.getItem("isGuest") || "false")
+    (isGuest === localStorage.getItem("isGuest") || "true")
   ) {
     console.log("access token found in local storage");
     return { access_token, expires_in };
@@ -32,7 +36,7 @@ export async function authData() {
   try {
     const endpoint = isGuest ? "unregister-auth" : "register-auth";
     const res = await axios.get(
-      `${serverUrl}sc-api/${endpoint}?dwsid=${dwsid}&email=${customerMail}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}&siteId=${getSiteId()}`,
+      `${serverUrl}sc-api/${endpoint}?dwsid=${dwsid}&email=${customerMail}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}&siteId=${getSiteId()}&token=true`,
       {
         withCredentials: true,
       }
@@ -42,8 +46,7 @@ export async function authData() {
       "expires_in",
       String(new Date().getTime() + res.data.expires_in * 1000)
     );
-    localStorage.setItem("isGuest", isGuest.toString());
-    console.log(res.data);
+    localStorage.setItem("isGuest", isGuest ? "true" : "false");
     return res.data;
   } catch (err) {
     console.log(err);

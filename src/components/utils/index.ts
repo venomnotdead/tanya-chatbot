@@ -30,8 +30,15 @@ export const organisationId = () => {
   return orgRef;
 };
 
-export const getSearchResults = async (query: string, token: string) => {
+export const getSearchResults = async (query: string) => {
+  console.log('fetching results');
   const { serverUrl, basePath } = apiConfig();
+  let token = "";
+  if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
+    const res = await authData();
+    console.log("the token from getSearchResults", res);
+    token = res.access_token;
+  }
 
   try {
     const host = getHost();

@@ -436,14 +436,12 @@ const TanyaShoppingAssistantStream = ({
   };
 
   const getKeywords = async (keywords: string[] | string) => {
-    console.log(authDetails?.access_token, "access_token");
     if (typeof keywords === "string") {
       console.log(keywords, "keywords");
       const splitedKeywords = keywords.split(",");
       for (const keyword of splitedKeywords) {
         const results = await getSearchResults(
-          keyword,
-          authDetails?.access_token
+          keyword
         );
         setProductLoading(false);
         if (results?.length > 0) {
@@ -480,8 +478,7 @@ const TanyaShoppingAssistantStream = ({
     } else {
       for (const keyword of keywords) {
         const results = await getSearchResults(
-          keyword,
-          authDetails?.access_token
+          keyword
         );
         setProductLoading(false);
         if (results?.length > 0) {
