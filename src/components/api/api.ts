@@ -1,5 +1,11 @@
 import { apiConfig } from "../../config/api";
-import { clientId, getHost, getSiteId, organisationId, shortCode } from "../utils";
+import {
+  clientId,
+  getHost,
+  getSiteId,
+  organisationId,
+  shortCode,
+} from "../utils";
 import { getAccessToken } from "../utils/getAccessToken";
 import axios from "axios";
 
@@ -32,7 +38,6 @@ interface Product {
 export const createBasket = async (customer_token: string, data?: any) => {
   const { serverUrl, basePath } = apiConfig();
   const URL = `${serverUrl}`;
-  console.log("customer_token \n", customer_token);
   try {
     const response = await axios.post(
       `${URL}${basePath}/basket/create?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
@@ -43,6 +48,13 @@ export const createBasket = async (customer_token: string, data?: any) => {
           Authorization: customer_token,
         },
       }
+    );
+    window.postMessage(
+      {
+        type: "WIDGET_CREATED_BASKET",
+        basketId: response.data?.basket_id || response.data?.basketId,
+      },
+      "*"
     );
 
     return response.data;

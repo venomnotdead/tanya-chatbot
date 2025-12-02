@@ -8,7 +8,6 @@ import {
   displayData,
   imageUrlArray,
 } from "../utils/helper";
-import { Icon } from "@iconify/react/dist/iconify.js";
 import { useEffect, useState } from "react";
 import { setProduct } from "../../store/reducers/productReducer";
 import { getProductById } from "../utils";
@@ -71,9 +70,14 @@ const ProductCarousel = ({
           <button
             onClick={prevProducts}
             className="absolute z-50 left-0 text-[#000000] bg-[#ffffff] rounded-full p-2 flex items-center h-fit"
-            // style={{ color: storeDetails.tanyaThemeColor }}
+            style={{
+              height: "30px",
+              width: "30px",
+              boxShadow: "0 4px 10px rgba(0, 0, 0, 0.25)",
+            }}
           >
-            <Icon icon="mdi:chevron-left" width="25" />
+            {/* <Icon icon="mdi:chevron-left" width="25" /> */}
+            &lt;
           </button>
         )}
 
@@ -161,9 +165,14 @@ const ProductCarousel = ({
           <button
             onClick={nextProducts}
             className="absolute z-50 right-0 text-[#000000] bg-[#ffffff] rounded-full p-2  flex items-center h-fit"
-            // style={{ color: storeDetails.tanyaThemeColor }}
+            style={{
+              height: "30px",
+              width: "30px",
+              boxShadow: "0 4px 10px rgba(0, 0, 0, 0.25)",
+            }}
           >
-            <Icon icon="mdi:chevron-right" width="25" />
+            {/* <Icon icon="mdi:chevron-right" width="25" /> */}
+            &gt;
           </button>
         )}
       </div>

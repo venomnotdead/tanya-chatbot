@@ -65,7 +65,6 @@ export const getProductById = async (id: number | string) => {
   const host = getHost();
   console.log("calling access");
   const { access_token } = await authData();
-  console.log(access_token);
   const response = await axios.get(
     `${serverUrl}${basePath}/product-sfcc/${id}?baseUrl=${host}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
     {

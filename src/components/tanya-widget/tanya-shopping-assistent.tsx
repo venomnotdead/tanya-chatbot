@@ -1,16 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useEffect } from "react";
 import { Popover, PopoverTrigger } from "../ui/popover";
-// import tanyaChatBotIcon from "@/assets/tanya-chatbot/chat-with-tanya.png";
-// import { getAccessToken } from "../utils/getAccessToken";
 import { getInterestApi, getProductById, getSearchResults } from "../utils";
 import type { SearchProduct } from "../graphQL/queries/types";
-import {
-  // decryptData,
-  // currencyFormatter,
-  formatStringToHtml,
-  // priceFormatter,
-} from "../utils/helper";
+import { formatStringToHtml } from "../utils/helper";
 import ProductDisplay from "../carousel/ProductDisplay";
 import { useSelector } from "react-redux";
 import ProductDisplayCard from "../product/ProductDisplayCard";
@@ -19,13 +12,17 @@ import { notifySFCC } from "../lib/utils";
 import { addProductToBasket, createBasket, fetchBasket } from "../api/api";
 import { fetchTokenBmGrant } from "../utils/fetchTokenBmGrant";
 import { fetchExistingGuestCustomerToken } from "../utils/fetchExistingRegisterCustomerToken";
-import { TOKEN_EXPIRY_KEY, VERSION } from "../../config/constant";
+import {
+  BASKET_ID_KEY,
+  TOKEN_EXPIRY_KEY,
+  VERSION,
+} from "../../config/constant";
 import {
   getStoredBasketId,
   setStoredBasketId,
   setStoredToken,
 } from "../utils/localStorage";
-import { authData } from "../../sfcc-apis/session";
+import { authData, getJWTToken } from "../../sfcc-apis/session";
 
 type ProductSnapshot = {
   id: string;
@@ -38,8 +35,12 @@ type ProductSnapshot = {
 
 const TanyaShoppingAssistantStream = ({
   tanyaConfig,
+  basketId,
+  addToCart,
 }: {
   tanyaConfig?: any;
+  basketId?: string;
+  addToCart?: any;
 }) => {
   // Shopping options
   const shoppingOptions = [
@@ -64,6 +65,7 @@ const TanyaShoppingAssistantStream = ({
   const productImage = useRef<string | null>(null);
   const productPrice = useRef<number | null>(null);
   const [authDetails, setAuthDetails] = useState<any>(null);
+  const lastChat = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -100,6 +102,43 @@ const TanyaShoppingAssistantStream = ({
   const storeDetails = useSelector((s: any) => s.store.store);
   const product = useSelector((s: any) => s.product.product);
 
+  // Runs once on mount
+  useEffect(() => {
+    const currentAccessToken = localStorage.getItem(
+      `access_token_${tanyaConfig.siteId}`
+    );
+    const savedChatToken = localStorage.getItem(
+      `chat-token-${tanyaConfig.siteId}`
+    );
+
+    if (currentAccessToken && savedChatToken === currentAccessToken) {
+      // Token matches → restore chat history
+      const savedHistory = localStorage.getItem("chatHistory");
+      if (savedHistory) {
+        setChatHistory(JSON.parse(savedHistory));
+      }
+    } else {
+      // Token missing OR mismatch → reset chat data
+      localStorage.setItem("chatHistory", JSON.stringify([]));
+      localStorage.setItem(
+        `chat-token-${tanyaConfig.siteId}`,
+        currentAccessToken || ""
+      );
+    }
+  }, []);
+
+  // Runs whenever chatHistory updates
+  useEffect(() => {
+    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+
+    const accessToken = localStorage.getItem(
+      `access_token_${tanyaConfig.siteId}`
+    );
+    if (accessToken) {
+      localStorage.setItem(`chat-token-${tanyaConfig.siteId}`, accessToken);
+    }
+  }, [chatHistory]);
+
   const openPanel = () => {
     setIsVisible(true);
     setTimeout(() => setIsAnimating(true), 10); // trigger opening animation
@@ -120,60 +159,16 @@ const TanyaShoppingAssistantStream = ({
   };
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += 150; // Scrolls down by 50px
-    }
-  }, [chatHistory]);
-
-  let cachedToken: any = null;
-  let tokenExpiry: any = null;
-
-  const getJWTToken = async () => {
-    if (cachedToken && tokenExpiry && Date.now() < tokenExpiry) {
-      return cachedToken;
-    }
-
-    try {
-      const tokenUrl =
-        "https://us-east-1lsr29ln3u.auth.us-east-1.amazoncognito.com/oauth2/token";
-
-      const tokenPayload = new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: "4i8rd70sgt961tc4dhskgf08c",
-        client_secret: "bnsfq1220loh2cn2cm2ttn8fdhdpt0u8m1fgj8vfk2rn61aurjg",
-        scope: "default-m2m-resource-server-8xzfzo/read",
+    if (isVisible && scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
       });
-
-      const tokenResponse = await fetch(tokenUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: tokenPayload,
-      });
-
-      if (!tokenResponse.ok) {
-        throw new Error(
-          `Token request failed! status: ${tokenResponse.status}`
-        );
-      }
-
-      const tokenData = await tokenResponse.json();
-
-      // Cache the token
-      cachedToken = tokenData.access_token;
-      const expiresIn = tokenData.expires_in || 3600; // Default to 1 hour
-      tokenExpiry = Date.now() + (expiresIn - 60) * 1000; // Refresh 1 minute before expiry
-
-      return cachedToken;
-    } catch (error) {
-      console.error("Error obtaining JWT token:", error);
-      // Clear cache on error
-      cachedToken = null;
-      tokenExpiry = null;
-      return null;
     }
-  };
+  }, [chatHistory, isVisible]);
+
+  const cachedToken: any = null;
+  const tokenExpiry: any = null;
 
   const getAuthDetails = async () => {
     const data = await authData(); // <- calls your async function
@@ -198,6 +193,13 @@ const TanyaShoppingAssistantStream = ({
     }
   }, []);
 
+  useEffect(() => {
+    if (basketId) {
+      console.log("setting the basket id", basketId);
+      setStoredBasketId(basketId);
+    }
+  }, [basketId]);
+
   const getInterests = async () => {
     const customer_id = JSON.parse(
       sessionStorage.getItem("customerData") || "{}"
@@ -219,7 +221,7 @@ const TanyaShoppingAssistantStream = ({
         )
       );
 
-      const accessToken = await getJWTToken();
+      const accessToken = await getJWTToken(cachedToken, tokenExpiry);
       if (!accessToken) throw new Error("Failed to fetch token");
 
       const user = localStorage.getItem("customerNumber");
@@ -333,7 +335,7 @@ const TanyaShoppingAssistantStream = ({
       const isLoggedIn = localStorage.getItem("isLoggedIn");
 
       // Get JWT access token
-      const accessToken = await getJWTToken();
+      const accessToken = await getJWTToken(cachedToken, tokenExpiry);
       if (!accessToken) {
         throw new Error("Failed to obtain access token");
       }
@@ -436,97 +438,73 @@ const TanyaShoppingAssistantStream = ({
   };
 
   const getKeywords = async (keywords: string[] | string) => {
-    if (typeof keywords === "string") {
-      console.log(keywords, "keywords");
-      const splitedKeywords = keywords.split(",");
-      for (const keyword of splitedKeywords) {
-        const results = await getSearchResults(
-          keyword
-        );
-        setProductLoading(false);
-        if (results?.length > 0) {
-          setChatHistory((prev) =>
-            prev.map((msg, idx) =>
-              idx === prev.length - 1
-                ? {
-                    ...msg,
-                    products: [
-                      ...(msg.products || []),
-                      { keyword: keyword, items: results, loading: false },
-                    ],
-                  }
-                : msg
-            )
-          );
-          if (!productName.current || productId.current == null) {
-            const first = results[0] as any;
-            productName.current = String(first?.product_name ?? "");
-            productImage.current = first.image.link;
-            productId.current = first.product_id;
+    const keys = typeof keywords === "string" ? keywords.split(",") : keywords;
 
-            // price
-            const priceVal =
-              typeof first?.price === "number" ? first.price : undefined;
+    setProductLoading(true);
 
-            productPrice.current =
-              typeof priceVal === "number" && Number.isFinite(priceVal)
-                ? priceVal
-                : null;
-          }
-        }
+    try {
+      // fire all API requests in parallel
+      const responses = await Promise.all(
+        keys.map((k) => getSearchResults(k).catch(() => [])) // prevent Promise.all crash
+      );
+
+      // build product array
+      const productData = keys
+        .map((keyword, idx) => ({
+          keyword,
+          items: responses[idx] ?? [],
+          loading: false,
+        }))
+        .filter((p) => p.items.length > 0);
+
+      // extract first product for snapshot
+      const firstProduct = productData[0]?.items?.[0];
+      if (firstProduct) {
+        productId.current = firstProduct.product_id;
+        productName.current = firstProduct.product_name;
+        productImage.current = firstProduct.image?.link;
+        const price =
+          typeof firstProduct.price === "number" ? firstProduct.price : null;
+        productPrice.current = price;
       }
-    } else {
-      for (const keyword of keywords) {
-        const results = await getSearchResults(
-          keyword
-        );
-        setProductLoading(false);
-        if (results?.length > 0) {
-          setChatHistory((prev) =>
-            prev.map((msg, idx) =>
-              idx === prev.length - 1
-                ? {
-                    ...msg,
-                    products: [
-                      ...(msg.products || []),
-                      { keyword: keyword, items: results, loading: false },
-                    ],
-                  }
-                : msg
-            )
-          );
-        }
-      }
-    }
-    if (productName.current) {
-      setChatHistory((prev: any) =>
-        prev.map((msg: any, idx: number) =>
+
+      // apply single chatHistory update
+      setChatHistory((prev) =>
+        prev.map((msg, idx) =>
           idx === prev.length - 1
             ? {
                 ...msg,
-                productSnapshot: {
-                  id: productId.current,
-                  name: productName.current,
-                  image: productImage.current,
-                  price: productPrice.current ?? null,
-                  points: 0,
-                  quantity: 1,
-                },
+                products: productData,
+                productSnapshot: firstProduct
+                  ? {
+                      id: productId.current,
+                      name: productName.current,
+                      image: productImage.current,
+                      price: productPrice.current,
+                      points: 0,
+                      quantity: 1,
+                    }
+                  : msg.productSnapshot,
               }
             : msg
         )
       );
-      const customerData = JSON.parse(
-        sessionStorage.getItem("customerData") || "{}"
-      );
-      if (customerData?.isGuest == false) {
-        console.log("running secondary flow", VERSION);
-        runSecondaryFlow(productName.current, 0);
-      } else {
-        console.log("not running secondary flow", VERSION);
+
+      // run secondary flow only if user logged in + snapshot ready
+      if (firstProduct) {
+        const customerData = JSON.parse(
+          sessionStorage.getItem("customerData") || "{}"
+        );
+        if (!customerData?.isGuest) {
+          console.log("running secondary flow", VERSION);
+          runSecondaryFlow(productName.current, 0);
+        }
       }
+    } catch (err) {
+      console.error("error in keyword search", err);
+    } finally {
+      setProductLoading(false);
     }
-    setProductLoading(false);
   };
 
   const handleAddToCart = async (productToBeAdded: any, quantity: number) => {
@@ -563,7 +541,8 @@ const TanyaShoppingAssistantStream = ({
       const customerData = JSON.parse(
         sessionStorage.getItem("customerData") || "{}"
       );
-      const basketIdFromCustomer = customerData?.basketId;
+      const basketIdFromCustomer =
+        customerData?.basketId || localStorage.getItem(BASKET_ID_KEY);
       const customer_token = false;
       const tokenExpiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
       const currentTime = Date.now();
@@ -589,7 +568,7 @@ const TanyaShoppingAssistantStream = ({
         const newExpiryTime = currentTime + 5 * 60 * 1000;
         setStoredToken(customer_token);
         localStorage.setItem(TOKEN_EXPIRY_KEY, newExpiryTime.toString());
-
+        console.log(basketIdFromCustomer, "basketIdFromCustomer");
         // 1. Try basketId from customerData
         if (basketIdFromCustomer) {
           const fetchBasketResponse = await fetchBasket({
@@ -646,27 +625,23 @@ const TanyaShoppingAssistantStream = ({
           console.error("Failed to create basket");
           return;
         }
-        // else if (basketResponse?.basketId) {
-        //   toast.success(`Added to cart`, {
-        //     position: "bottom-right",
-        //     autoClose: 3000,
-        //     hideProgressBar: false,
-        //     closeOnClick: true,
-        //     pauseOnHover: true,
-        //     draggable: true,
-        //   });
-        // }
-
         // Store new basket ID
         setStoredBasketId(
           basketResponse?.basket_id || basketResponse?.basketId
         );
         // Add product to new basket
         // if (!import.meta.env.VITE_SCAPI_ENVIRONMENT) {
-        const response = await addProductToBasket(
-          basketResponse?.basket_id || basketResponse?.basketId,
-          productData,
-          customer_token
+        // const response = await addProductToBasket(
+        //   basketResponse?.basket_id || basketResponse?.basketId,
+        //   productData,
+        //   customer_token
+        // );
+        const response = await addToCart(
+          {
+            productId,
+            quantity,
+          },
+          basketResponse?.basket_id || basketResponse?.basketId
         );
         if (
           response?.product_items?.length > 0 ||
@@ -692,11 +667,15 @@ const TanyaShoppingAssistantStream = ({
           return;
         }
 
-        const response = await addProductToBasket(
-          basketId,
-          productData,
-          customer_token
-        );
+        // const response = await addProductToBasket(
+        //   basketId,
+        //   productData,
+        //   customer_token
+        // );
+        const response = await addToCart({
+          productId,
+          quantity,
+        });
         if (response?.product_items?.length > 0) {
           toast.success(`Added to cart`, {
             position: "bottom-right",
@@ -738,11 +717,19 @@ const TanyaShoppingAssistantStream = ({
           autoClose: 3000,
         });
       }
-    } finally {
-      notifySFCC();
     }
     setAdding(false);
   };
+
+  // useEffect(() => {
+  //   if (lastChat.current)
+  //     lastChat.current.scrollIntoView({ behavior: "smooth" });
+  // }, [lastChat.current]);
+
+  useEffect(() => {
+    if (isVisible) setTimeout(() => setIsAnimating(true), 10);
+    else setIsAnimating(false);
+  }, [isVisible]);
 
   // Update the main container div's className
   return (
@@ -812,12 +799,14 @@ const TanyaShoppingAssistantStream = ({
                 fixed z-50 h-screen w-[100vw] sm:w-[80vw] md:w-[770px] border-0 bg-white lg:rounded-l-xl overflow-hidden flex flex-col shadow-[0px_4px_10px_0px_#5F499840]
                 top-0 right-0
                 transition-transform duration-300 ease-in-out
-                lg:transform
-                ${isAnimating ? "lg:translate-x-0" : "lg:translate-x-full"}
-                // For mobile: animate from bottom
-                ${isAnimating ? "translate-y-0" : "translate-y-full"}
-                lg:translate-y-0
-              `}
+                lg:transform lg:translate-y-0
+                
+                `}
+              // ${
+              //   isAnimating
+              //     ? "lg:translate-x-0 translate-y-0"
+              //     : "lg:translate-x-full translate-y-full"
+              // }
               style={{
                 background:
                   "linear-gradient(170.1deg, #FFFFFF 60.03%, #E3DEEF 99.59%)",
@@ -830,7 +819,6 @@ const TanyaShoppingAssistantStream = ({
                 <div
                   style={{
                     display: "flex",
-                    color: storeDetails.tanyaThemeContrastColor,
                     alignItems: "center",
                     gap: "0.5rem",
                   }}
@@ -978,7 +966,12 @@ const TanyaShoppingAssistantStream = ({
                     {/* Chat History */}
                     {chatHistory.map((chat, index) => (
                       <div key={index}>
-                        <div className="flex justify-end">
+                        <div
+                          className="flex justify-end"
+                          // ref={
+                          //   index == chatHistory.length - 1 ? lastChat : null
+                          // }
+                        >
                           <p className="text-sm font-nunitoSans font-bold text-[#000000] bg-[#E2DBFF] border border-[#C9C2DE] rounded-l-xl p-2 m-3 mb-4 rounded-br-xl max-w-[75%]">
                             {chat.query}
                           </p>
@@ -1019,7 +1012,7 @@ const TanyaShoppingAssistantStream = ({
                         )}
 
                         {/* Potential Questions */}
-                        {chat.potentialQuestions.length > 0 && (
+                        {chat?.potentialQuestions.length > 0 && (
                           <div className="my-2 px-4 text-sm text-gray-700">
                             <p
                               className="font-nunitoSans font-bold text-sm text-[#494949]"
@@ -1045,7 +1038,7 @@ const TanyaShoppingAssistantStream = ({
                           </div>
                         )}
 
-                        {chat.secondaryLoading && (
+                        {chat?.secondaryLoading && (
                           <div className="mt-3 mb-4 px-4">
                             <div
                               className="tanya-surprise-wrapper bg-indigo-300 text-sm px-7 py-4 rounded-r-xl rounded-bl-2xl w-full relative overflow-hidden"
@@ -1083,7 +1076,7 @@ const TanyaShoppingAssistantStream = ({
                         )}
 
                         {/* Secondary Response (from secondary flow) */}
-                        {chat.secondaryResponse && (
+                        {chat?.secondaryResponse && (
                           <>
                             <div className="mt-3 mb-8 px-4 bg-indigo-300 rounded-tr-[5px]">
                               {/* Chat Response */}
@@ -1361,7 +1354,7 @@ const TanyaShoppingAssistantStream = ({
                   </div>
                 </div>
 
-                <ProductDisplayCard />
+                <ProductDisplayCard addToCartPwa={addToCart} />
               </div>
               {/* </PopoverContent> */}
             </div>
@@ -1373,5 +1366,3 @@ const TanyaShoppingAssistantStream = ({
 };
 
 export default TanyaShoppingAssistantStream;
-
-// ${import.meta.env.VITE_SERVER_BASE_URL}api/web-bff/assistantStream

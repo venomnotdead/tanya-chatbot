@@ -13,7 +13,7 @@ import {
   setStoredToken,
 } from "../utils/localStorage";
 import { toast } from "react-toastify";
-import { TOKEN_EXPIRY_KEY } from "../../config/constant";
+import { BASKET_ID_KEY, TOKEN_EXPIRY_KEY } from "../../config/constant";
 import { fetchTokenBmGrant } from "../utils/fetchTokenBmGrant";
 import {
   // fetchExistingRegisterCustomerToken,
@@ -24,7 +24,7 @@ import { authData } from "../../sfcc-apis/session";
 
 const ANIMATION_DURATION = 300; // ms
 
-const ProductDisplayCard = () => {
+const ProductDisplayCard = ({ addToCartPwa }) => {
   const dispatch = useDispatch();
   const product = useSelector((state: any) => state.product.product);
   const storeDetails = useSelector((s: any) => s.store.store);
@@ -39,7 +39,6 @@ const ProductDisplayCard = () => {
   // const { sizeAttr, colorAttr, widthAttr } = attributes;
 
   const addToCart = async () => {
-    console.log(product, "the prod");
     try {
       // Check if product and variants exist
 
@@ -65,12 +64,12 @@ const ProductDisplayCard = () => {
           quantity: 1,
         },
       ];
-      console.log(productData, "the product data");
       // for getting customer id
       const customerData = JSON.parse(
         sessionStorage.getItem("customerData") || "{}"
       );
-      const basketIdFromCustomer = customerData?.basketId;
+      const basketIdFromCustomer =
+        customerData?.basketId || localStorage.getItem(BASKET_ID_KEY);
       const customer_token = false;
       const tokenExpiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
       const currentTime = Date.now();
@@ -84,7 +83,6 @@ const ProductDisplayCard = () => {
         let customer_token = "";
         if (import.meta.env.VITE_SCAPI_ENVIRONMENT) {
           const authDetails = await authData();
-          console.log("token from auth data");
           customer_token = "Bearer " + authDetails.access_token;
         } else {
           console.log("token from bm grant");
@@ -108,7 +106,6 @@ const ProductDisplayCard = () => {
             basketId: basketIdFromCustomer,
             customer_token,
           });
-          console.log(basketIdFromCustomer, "basket id from customer");
           if (fetchBasketResponse.status === 200 && fetchBasketResponse) {
             // Use this basketId to add product
 
@@ -117,6 +114,11 @@ const ProductDisplayCard = () => {
               productData,
               customer_token
             );
+
+            // const response = await addToCartPwa(
+            //   productData
+            //   // basketResponse?.basket_id || basketResponse?.basketId
+            // );
             if (
               response?.product_items?.length > 0 ||
               response?.productItems?.length > 0
@@ -131,6 +133,7 @@ const ProductDisplayCard = () => {
                 draggable: true,
               });
               notifySFCC(basketIdFromCustomer);
+
               // window.location.reload();
             }
             return; // Skip basket creation
@@ -149,22 +152,12 @@ const ProductDisplayCard = () => {
             },
           ],
         };
-        console.log("before create basket");
+
         const basketResponse = await createBasket(customer_token, data);
-        console.log(
-          basketResponse,
-          basketResponse?.basket_id,
-          basketResponse?.basketId,
-          "the basket response"
-        );
         if (!basketResponse?.basket_id && !basketResponse?.basketId) {
           console.error("Failed to create basket");
           return;
         }
-        console.log(
-          "setting stored id",
-          basketResponse?.basket_id || basketResponse?.basketId
-        );
         // else if (basketResponse?.basketId) {
         //   toast.success(`Added to cart`, {
         //     position: "bottom-right",
@@ -186,6 +179,10 @@ const ProductDisplayCard = () => {
           productData,
           customer_token
         );
+        // const response = await addToCartPwa(
+        //   productData,
+        //   basketResponse?.basket_id || basketResponse?.basketId
+        // );
         console.log("object added to basket");
         if (
           response?.product_items?.length > 0 ||
@@ -254,16 +251,15 @@ const ProductDisplayCard = () => {
           autoClose: 3000,
         });
       }
-    } finally {
-      notifySFCC();
     }
   };
 
   // Function to generate and redirect to the product detail page
   const viewMore = () => {
     if (!product) return;
-
-    window.location.href = product.c_pdpUrl; //redirect to sfcc product details url
+    const path = window.location.origin +"/product/" +product.id;
+    console.log("path", path);
+    window.location.href = path; //redirect to sfcc product details url
   };
   console.log(product, "the prod");
   return (
@@ -297,7 +293,19 @@ const ProductDisplayCard = () => {
             </p>
           </div>
           <div>
-            <Icon
+            <div
+              className="text-[#555555] w-6 h-6 cursor-pointer"
+              onClick={() => {
+                setShow(false);
+                setTimeout(
+                  () => dispatch(setProduct(null)),
+                  ANIMATION_DURATION
+                );
+              }}
+            >
+              &#10005;
+            </div>
+            {/* <Icon
               icon="mdi:close"
               className="text-[#555555] w-6 h-6 cursor-pointer"
               onClick={() => {
@@ -307,7 +315,7 @@ const ProductDisplayCard = () => {
                   ANIMATION_DURATION
                 );
               }}
-            />
+            /> */}
           </div>
         </div>
         {/* image and variants */}
@@ -331,14 +339,16 @@ const ProductDisplayCard = () => {
             )
               .slice(1, 2)
               .map((group: any) =>
-                group.images.slice(1, 2).map((image: any) => (
-                  <img
-                    key={image.link}
-                    src={image.link}
-                    alt={product.name}
-                    className="rounded-[10px] w-[60px] h-[60px]"
-                  />
-                ))
+                group.images
+                  .slice(1, 2)
+                  .map((image: any) => (
+                    <img
+                      key={image.link}
+                      src={image.link}
+                      alt={product.name}
+                      className="rounded-[10px] w-[60px] h-[60px]"
+                    />
+                  ))
               )}
           </div>
         </div>
@@ -368,7 +378,9 @@ const ProductDisplayCard = () => {
           </div>
           <div
             className="text-[#68656E] font-normal font-nunitoSans text-xs pl-2 mt-3"
-            dangerouslySetInnerHTML={{ __html: product.short_description || product.longDescription }}
+            dangerouslySetInnerHTML={{
+              __html: product.short_description || product.longDescription,
+            }}
           ></div>
         </div>
         {/* rating and reviews */}
@@ -408,7 +420,7 @@ const ProductDisplayCard = () => {
 
         <div
           className="flex flex-col items-center justify-between font-nunitoSans font-semibold w-5/6 text-black gap-2"
-          style={{ marginTop: "150px" }}
+          style={{ marginTop: "40px" }}
         >
           <button
             className="rounded-[5px] shadow-sm text-[#FBFBFC] bg-[#6851C6] p-2 w-full text-center cursor-pointer"
