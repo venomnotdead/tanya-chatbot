@@ -21,13 +21,16 @@ import {
 } from "../utils/fetchExistingRegisterCustomerToken";
 import { notifySFCC } from "../lib/utils";
 import { authData } from "../../sfcc-apis/session";
+import { AgenticShoppingButton } from "../..";
 
 const ANIMATION_DURATION = 300; // ms
 
-const ProductDisplayCard = ({ addToCartPwa }) => {
+const ProductDisplayCard = () => {
   const dispatch = useDispatch();
   const product = useSelector((state: any) => state.product.product);
   const storeDetails = useSelector((s: any) => s.store.store);
+  const customerDetails = useSelector((s: any) => s.customer);
+  const [isAgenticShopping, setIsAgenticShopping] = useState(false);
   const [show, setShow] = useState(!!product);
 
   useEffect(() => {
@@ -257,7 +260,7 @@ const ProductDisplayCard = ({ addToCartPwa }) => {
   // Function to generate and redirect to the product detail page
   const viewMore = () => {
     if (!product) return;
-    const path = window.location.origin +"/product/" +product.id;
+    const path = window.location.origin + "/product/" + product.id;
     console.log("path", path);
     window.location.href = path; //redirect to sfcc product details url
   };
@@ -422,6 +425,58 @@ const ProductDisplayCard = ({ addToCartPwa }) => {
           className="flex flex-col items-center justify-between font-nunitoSans font-semibold w-5/6 text-black gap-2"
           style={{ marginTop: "40px" }}
         >
+          {customerDetails?.customerId && (
+            <div
+              style={{ display: "flex", justifyContent: "center" }}
+              className="w-full"
+            >
+              <button
+                className="w-full"
+                onClick={() => {
+                  setIsAgenticShopping(true);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  background:
+                    "linear-gradient(265.62deg, #6851C6 5.24%, #8668FF 98.49%)",
+                  borderRadius: "10px",
+                  justifyContent: "center",
+                  marginBottom: "10px",
+                  color: "white",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  className="lucide lucide-sparkles-icon lucide-sparkles"
+                >
+                  <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+                  <path d="M20 2v4" />
+                  <path d="M22 4h-4" />
+                  <circle cx="4" cy="20" r="2" />
+                </svg>
+                Agentic shopping
+              </button>
+            </div>
+          )}
+          {isAgenticShopping && (
+            <AgenticShoppingButton
+              open={isAgenticShopping}
+              onClose={() => setIsAgenticShopping(false)}
+              product={product}
+              variationAttributes={product.variationAttributes}
+              customerId={customerDetails.customerId}
+              addresses={customerDetails.addresses}
+            />
+          )}
           <button
             className="rounded-[5px] shadow-sm text-[#FBFBFC] bg-[#6851C6] p-2 w-full text-center cursor-pointer"
             style={{ backgroundColor: storeDetails.tanyaThemeColor }}

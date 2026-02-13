@@ -1,4 +1,5 @@
 import { apiConfig } from "../../config/api";
+import { authData } from "../../sfcc-apis/session";
 import {
   clientId,
   getHost,
@@ -42,6 +43,41 @@ export const createBasket = async (customer_token: string, data?: any) => {
     const response = await axios.post(
       `${URL}${basePath}/basket/create?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
       data,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: customer_token,
+        },
+      }
+    );
+    window.postMessage(
+      {
+        type: "WIDGET_CREATED_BASKET",
+        basketId: response.data?.basket_id || response.data?.basketId,
+      },
+      "*"
+    );
+
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error("Error creating basket:", error.response || error.message);
+    } else {
+      console.error("Unexpected error:", error);
+    }
+    return null;
+  }
+};
+
+export const createAgenticBasket = async () => {
+  const authDetails = await authData();
+  const customer_token = "Bearer " + authDetails?.access_token;
+  const { serverUrl, basePath } = apiConfig();
+  const URL = `${serverUrl}`;
+  try {
+    const response = await axios.post(
+      `${URL}${basePath}/basket/agentic-create?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
+      {},
       {
         headers: {
           "Content-Type": "application/json",
@@ -130,5 +166,44 @@ export const fetchBasket = async ({
     } else {
       return { status: null, data: null };
     }
+  }
+};
+
+export const getShippingMethods = async (basketId: string) => {
+  const { serverUrl, basePath } = apiConfig();
+  const URL = `${serverUrl}`;
+  const authDetails = await authData();
+  const customer_token = "Bearer " + authDetails?.access_token;
+  try {
+    const response = await axios.get(
+      `${URL}${basePath}/basket/shipping-methods/${basketId}?baseUrl=${getHost()}&siteId=${getSiteId()}&pubCfg=${clientId()}&envRef=${shortCode()}&orgRef=${organisationId()}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: customer_token,
+        },
+      }
+    );
+    console.log("the shipping data\n", response.data);
+    if (response?.data?.isNewBasket) {
+      window.postMessage(
+        {
+          type: "WIDGET_CREATED_BASKET",
+          basketId: response.data?.basketId,
+        },
+        "*"
+      );
+    }
+    return response?.data?.applicableShippingMethods || [];
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error(
+        "Error fetching shipping methods:",
+        error.response || error.message
+      );
+    } else {
+      console.error("Unexpected error:", error);
+    }
+    return [];
   }
 };

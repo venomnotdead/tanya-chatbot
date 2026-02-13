@@ -5,7 +5,7 @@ import { getInterestApi, getProductById, getSearchResults } from "../utils";
 import type { SearchProduct } from "../graphQL/queries/types";
 import { formatStringToHtml } from "../utils/helper";
 import ProductDisplay from "../carousel/ProductDisplay";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import ProductDisplayCard from "../product/ProductDisplayCard";
 import { toast } from "react-toastify";
 import { notifySFCC } from "../lib/utils";
@@ -23,6 +23,7 @@ import {
   setStoredToken,
 } from "../utils/localStorage";
 import { authData, getJWTToken } from "../../sfcc-apis/session";
+import { setCustomer } from "../../store/reducers/customerReducer";
 
 type ProductSnapshot = {
   id: string;
@@ -37,10 +38,12 @@ const TanyaShoppingAssistantStream = ({
   tanyaConfig,
   basketId,
   addToCart,
+  customerData,
 }: {
   tanyaConfig?: any;
   basketId?: string;
   addToCart?: any;
+  customerData?: any;
 }) => {
   // Shopping options
   const shoppingOptions = [
@@ -81,7 +84,7 @@ const TanyaShoppingAssistantStream = ({
     image: snap.image ?? "",
     price: snap.price ?? 0,
   });
-  // const dispatch = useDispatch();
+  const dispatch = useDispatch();
 
   const [chatHistory, setChatHistory] = useState<
     {
@@ -126,6 +129,12 @@ const TanyaShoppingAssistantStream = ({
       );
     }
   }, []);
+
+  useEffect(() => {
+    if (customerData?.customerId) {
+      dispatch(setCustomer(customerData));
+    }
+  }, [customerData]);
 
   // Runs whenever chatHistory updates
   useEffect(() => {
@@ -195,7 +204,6 @@ const TanyaShoppingAssistantStream = ({
 
   useEffect(() => {
     if (basketId) {
-      console.log("setting the basket id", basketId);
       setStoredBasketId(basketId);
     }
   }, [basketId]);

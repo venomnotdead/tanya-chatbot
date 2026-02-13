@@ -5,12 +5,11 @@ import TanyaShoppingAssistantStream from "./tanya-shopping-assistent";
 import { apolloClient } from "../graphQL/apollo-client";
 
 const TanyaWrapper = (props: any) => {
- 
- const { tanyaConfig } = props;
+  const { tanyaConfig, customerData } = props;
   return (
     <ApolloProvider client={apolloClient}>
       <ReduxProvider>
-        <TanyaShoppingAssistantStream tanyaConfig={tanyaConfig} />
+        <TanyaShoppingAssistantStream tanyaConfig={tanyaConfig} customerData={customerData} />
       </ReduxProvider>
     </ApolloProvider>
   );

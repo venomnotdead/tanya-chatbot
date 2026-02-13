@@ -8,20 +8,23 @@ import {
   CURRENCY_PREF,
   getVariantColor,
   getVariantSize,
-  findVariantBy,
   pickVariantMoney,
-  isVariantOnStock,
 } from "./productVariantHelper";
 import { apiConfig } from "../../config/api";
 import { getJWTToken, authData } from "../../sfcc-apis/session";
+import { BASKET_ID_KEY } from "../../config/constant";
+import { createBasket, getShippingMethods } from "../api/api";
+import { clientId, getHost } from "../utils";
 
 type AgenticShoppingProps = {
   open: boolean;
   onClose: () => void;
   product: any;
   index?: number;
-  addressListProp?: any;
+  addresses?: any;
   addressLoading?: boolean;
+  variationAttributes: any;
+  customerId: string;
 };
 
 const initialCapital = (str: string) => {
@@ -87,9 +90,8 @@ const getVariantImage = (v?: any) => v?.images?.[0]?.url ?? "";
 // any-aware image/title
 const getProductImage = (p?: any, v?: any) =>
   getVariantImage(v) ||
-  (p as any)?.image ||
-  (p as any)?.images?.[0]?.src ||
-  (p as any)?.media?.[0]?.url ||
+  p.imageGroups?.[0]?.images?.[0]?.link ||
+  p.image_groups?.[0]?.images?.[0]?.link ||
   "";
 
 const getProductTitle = (p?: any) =>
@@ -189,8 +191,10 @@ const AgenticShopping = ({
   onClose,
   product,
   index,
-  addressListProp,
+  addresses,
   addressLoading,
+  variationAttributes,
+  customerId,
 }: AgenticShoppingProps) => {
   const cachedToken: any = null;
   const tokenExpiry: any = null;
@@ -200,6 +204,167 @@ const AgenticShopping = ({
     Math.max(0, index || 0),
     Math.max(0, allVariants.length - 1)
   );
+  const [variantsByColor, setVariantsByColor] = useState([]);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
+  const [shipping_methods, setShippingMethods] = useState([]);
+  const [productPrice, setProductPrice] = useState(0);
+  const [isSizeAvailable, setIsSizeAvailable] = useState(false);
+
+  const groupVariantsByColor = (
+    variants: any[],
+    imageGroups: any[],
+    variationAttributes: any[]
+  ) => {
+    const { colorMap, sizeMap, orderableValues } =
+      buildVariationMaps(variationAttributes);
+
+    const imagesByColor = buildImagesByColor(imageGroups, variants);
+
+    const map = variants.reduce((acc: any, item: any) => {
+      const colorCode = item.variationValues?.color;
+      const sizeCode = item.variationValues?.size;
+
+      if (!colorCode) return acc;
+
+      const hasColorAttr = orderableValues.color.size > 0;
+      const hasSizeAttr = orderableValues.size.size > 0;
+
+      const isColorOrderable =
+        !hasColorAttr || orderableValues.color.has(colorCode);
+      const isSizeOrderable =
+        !hasSizeAttr || !sizeCode || orderableValues.size.has(sizeCode);
+
+      if (!isColorOrderable || !isSizeOrderable) {
+        console.log(
+          `⏭️ Skipping non-orderable variant: color=${colorCode}, size=${sizeCode}`
+        );
+        return acc;
+      }
+
+      acc[colorCode] ||= {
+        color: colorCode,
+        name: colorMap[colorCode] || colorCode,
+        images: imagesByColor[colorCode] || {},
+        variants: [],
+        productId: item.productId,
+      };
+
+      if (!sizeCode) return acc;
+
+      const sizeExists = acc[colorCode].variants.some(
+        (v: any) => v.size === sizeCode
+      );
+
+      if (!sizeExists) {
+        acc[colorCode].variants.push({
+          size: sizeCode,
+          name: sizeMap[sizeCode] || sizeCode,
+          ...item,
+        });
+      }
+
+      return acc;
+    }, {});
+
+    return Object.values(map).map((entry: any) => ({
+      ...entry,
+      variants: entry.variants.sort(
+        (a: any, b: any) => Number(a.size) - Number(b.size)
+      ),
+    }));
+  };
+
+  const buildVariationMaps = (variationAttributes: any[]) => {
+    console.log("🔧 buildVariationMaps CALLED", variationAttributes);
+
+    const colorMap: Record<string, string> = {};
+    const sizeMap: Record<string, string> = {};
+
+    const orderableValues = {
+      color: new Set<string>(),
+      size: new Set<string>(),
+    };
+
+    variationAttributes?.forEach((attr, index) => {
+      console.log(`🔍 Processing variationAttribute[${index}]`, attr);
+
+      if (attr.id === "color") {
+        attr.values?.forEach((v: any) => {
+          if (v.orderable !== false) {
+            colorMap[v.value] = v.name;
+            orderableValues.color.add(v.value);
+            console.log(`🎨 colorMap[${v.value}] = ${v.name} (orderable)`);
+          } else {
+            console.log(`⏭️ Skipping non-orderable color: ${v.name}`);
+          }
+        });
+      }
+
+      if (attr.id === "size") {
+        attr.values?.forEach((v: any) => {
+          if (v.orderable !== false) {
+            sizeMap[v.value] = v.name;
+            orderableValues.size.add(v.value);
+            console.log(`📏 sizeMap[${v.value}] = ${v.name} (orderable)`);
+          } else {
+            console.log(`⏭️ Skipping non-orderable size: ${v.name}`);
+          }
+        });
+      }
+    });
+
+    console.log("✅ buildVariationMaps RESULT", {
+      colorMap,
+      sizeMap,
+      orderableValues,
+    });
+
+    return { colorMap, sizeMap, orderableValues };
+  };
+
+  const buildImagesByColor = (imageGroups: any[], variants: any[]) => {
+    const imagesByColor: Record<string, any> = {};
+    const defaultImages: Record<string, any> = {};
+
+    console.log("🖼️ Building image maps");
+
+    imageGroups?.forEach((group, index) => {
+      const viewType = group.viewType;
+      const images = group.images;
+
+      const colorAttr = group.variationAttributes?.find(
+        (a: any) => a.id === "color"
+      );
+
+      if (colorAttr?.values?.[0]?.value) {
+        const colorCode = colorAttr.values[0].value;
+
+        imagesByColor[colorCode] ||= {};
+        imagesByColor[colorCode][viewType] = images;
+
+        console.log(`🎨 Color image mapped → ${colorCode} [${viewType}]`);
+      } else {
+        defaultImages[viewType] = images;
+        console.log(`📦 Default image mapped [${viewType}]`);
+      }
+    });
+
+    console.log("🎨 imagesByColor:", imagesByColor);
+    console.log("📦 defaultImages:", defaultImages);
+
+    variants?.forEach((variant) => {
+      const color = variant?.variationValues?.color;
+      if (!color) return;
+
+      if (!imagesByColor[color]) {
+        console.warn(`⚠️ No images for color=${color}, using default images`);
+        imagesByColor[color] = defaultImages;
+      }
+    });
+
+    return imagesByColor;
+  };
+
   const variantCount = allVariants.length;
 
   const [selectedVariantIdx, setSelectedVariantIdx] =
@@ -212,6 +377,7 @@ const AgenticShopping = ({
   const masterSizeRef = useRef<string | null>(null);
   //   const navigate = useNavigate();
   const selectedVariant = getVariantByIndex(product, selectedVariantIdx);
+  const [basketId, setBasketId] = useState("");
 
   // flow gating states
   const [pendingQuery, setPendingQuery] = useState<string>("");
@@ -237,8 +403,9 @@ const AgenticShopping = ({
   const [addressSubmitted, setAddressSubmitted] = useState(false);
 
   const [showDeliveryOptions, setShowDeliveryOptions] = useState(false);
-  const [selectedDelivery, setSelectedDelivery] =
-    useState<DeliveryOptionKey>("standard");
+  const [selectedDelivery, setSelectedDelivery] = useState<DeliveryOptionKey>({
+    id: "001",
+  });
   const [deliverySubmitted, setDeliverySubmitted] = useState(false);
 
   // payment state
@@ -255,55 +422,43 @@ const AgenticShopping = ({
   const [feedbackRating, setFeedbackRating] = useState<number | null>(null);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [selectedVariantProductId, setSelectedVariantProductId] = useState<
+    string | null
+  >(product?.id);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // GraphQL address hook
-  //   const {
-  //     getCustomerAddresses,
-  //     addresses: hookAddresses,
-  //     loading: addressLoading,
-  //   } = useCustomerAddress();
-
-  // Normalize addresses
-  //   useEffect(() => {
-  //     if (!Array.isArray(hookAddresses)) return;
-  //     const normalized = hookAddresses.map(mapGraphQLAddressToUI);
-  //     setAddressList((prev) => {
-  //       if (
-  //         prev.length === normalized.length &&
-  //         prev.every(
-  //           (p, i) =>
-  //             String((p as any).addressId) ===
-  //             String((normalized[i] as any).addressId)
-  //         )
-  //       ) {
-  //         return prev;
-  //       }
-  //       return normalized;
-  //     });
-  //   }, [hookAddresses]);
-
-  // seed defaults from master on product/index change
   useEffect(() => {
-    const all = pvAll(product);
-    const bounded = Math.min(
-      Math.max(0, index || 0),
-      Math.max(0, all.length - 1)
-    );
-    setSelectedVariantIdx(bounded);
+    if (!product?.variants) {
+      console.log("when no product variant found", product);
+      setSelectedVariantProductId(product.id);
+      setSelectedVariantIndex(0);
+    } else if (product?.variants) {
+      console.log("when product variant is found", JSON.stringify(product));
+      const grouped = groupVariantsByColor(
+        product.variants,
+        product.imageGroups,
+        variationAttributes
+      );
+      console.log(grouped, "the grouped data");
+      setVariantsByColor(grouped.filter((g) => g.images?.large));
+      if (grouped.length > 0) {
+        const name = grouped[0]?.name;
+        setPickedColor(name);
+        if (grouped[0]?.variants.length > 0) {
+          setIsSizeAvailable(true);
+        }
+        setPickedSize(grouped[0]?.variants[0]?.name);
+        setSelectedVariantIdx(0);
+        setSelectedVariantProductId(
+          grouped[0]?.variants[0]?.productId || grouped[0]?.productId
+        );
 
-    const m = pvMaster(product);
-    const mColor = getVariantColor(m);
-    const mSize = getVariantSize(m);
+        setSelectedVariantIndex(0);
+      }
+    }
+  }, [product]);
 
-    masterColorRef.current = mColor || null;
-    masterSizeRef.current = mSize || null;
-    setPickedColor(mColor || null);
-    setPickedSize(mSize || null);
-  }, [index, product]);
-
-  // scroll to bottom on changes
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -325,8 +480,8 @@ const AgenticShopping = ({
   // --------------------- UI helpers (theme) ---------------------
   const themeColor = "var(--tanya)";
   const themeDark = "var(--tanya-contrast)";
-  const theme = themeColor || "#16a34a";
-  const themeHeaderBg = "#2b72b8";
+  const themeHeaderBg = "#804c9e";
+  const theme = themeHeaderBg;
 
   const handleFeedbackSubmit = () => {
     console.log("AgenticShopping feedback:", {
@@ -351,7 +506,6 @@ const AgenticShopping = ({
       null;
 
     const id = idFromPayload ?? intentMandateId;
-    console.log(open, "it is open");
     if (!open) return null;
 
     return (
@@ -432,7 +586,9 @@ const AgenticShopping = ({
                   type="button"
                   onClick={handleFeedbackSubmit}
                   className="px-4 py-2 rounded-full text-sm font-semibold text-white shadow"
-                  style={{ background: themeColor }}
+                  style={{
+                    background: feedbackComment.trim() ? themeHeaderBg : "gray",
+                  }}
                   disabled={!feedbackRating && !feedbackComment.trim()}
                 >
                   Submit
@@ -455,10 +611,31 @@ const AgenticShopping = ({
     try {
       //   const fetched = await getCustomerAddresses();
       //   const normalized = (fetched || []).map(mapGraphQLAddressToUI);
-      setAddressList(addressListProp);
+      setAddressList(addresses);
+      const customerData = JSON.parse(
+        sessionStorage.getItem("customerData") || "{}"
+      );
+      let basketIdFromCustomer =
+        customerData?.basketId || localStorage.getItem(BASKET_ID_KEY);
+      // || "376ac9d2ce91305eb4bfe34c35";
+      if (!basketIdFromCustomer) {
+        //call create basket agentic then get bakset id
+        const authDetails = await authData();
+        const customer_token = "Bearer " + authDetails?.access_token;
+        const basketResponse = await createBasket(customer_token);
+        basketIdFromCustomer =
+          basketResponse?.basket_id || basketResponse.basketId;
+      }
+      //then get shipping methods
+      getAllShippingMethods(basketIdFromCustomer);
+      setBasketId(basketIdFromCustomer);
     } catch (error) {
       console.error("Error fetching addresses:", error);
     }
+  };
+  const getAllShippingMethods = async (basketId: string) => {
+    const response = await getShippingMethods(basketId);
+    setShippingMethods(response);
   };
 
   const snapshotToHistory = (stage: Stage, payload: any) => {
@@ -550,26 +727,14 @@ const AgenticShopping = ({
   }, [product]);
 
   const hasMatchingVariant = useMemo(() => {
+    if (!product?.variants) return true;
     if (!variantEntries.length) return false;
 
     const color = pickedColor || undefined;
     const size = pickedSize || undefined;
-
-    const resolveFor = (c?: string | null, s?: string | null) => {
-      const combo = findVariantBy(
-        variantEntries,
-        c || undefined,
-        s || undefined
-      );
-      return !!(combo && combo.variant?.sku);
-    };
-
-    if (color && size) return resolveFor(color, size);
-    if (color && !size) return resolveFor(color, null);
-    if (!color && size) return resolveFor(undefined, size);
-
-    // No explicit picks → rely on selectedVariant
-    return !!(selectedVariant && selectedVariant.sku);
+    if (color && size) return true;
+    else if (color && !isSizeAvailable) return true;
+    else return false;
   }, [variantEntries, pickedColor, pickedSize, selectedVariant]);
 
   const isInputDisabled = isLoading || chatLocked || !hasMatchingVariant;
@@ -598,7 +763,7 @@ const AgenticShopping = ({
       currencyArg || source?.currency || variantPrice.currency || CURRENCY_PREF;
     const product_total = computeProductTotalWithFallback(source);
     const tax = +(product_total * 0.08).toFixed(2);
-    const shipping_fee = DELIVERY_OPTIONS[selectedDelivery]?.fee || 0;
+    const shipping_fee = selectedDelivery?.price || 0;
     return { product_total, tax, shipping_fee, currency };
   };
 
@@ -621,11 +786,10 @@ const AgenticShopping = ({
       const token = await getJWTToken(cachedToken, tokenExpiry);
       if (!token) throw new Error("Failed to fetch token");
 
-      const user = localStorage.getItem("customerNumber");
       const isLoggedIn = localStorage.getItem("isLoggedIn");
       const queryParams = new URLSearchParams({
-        registered: String(isLoggedIn || false),
-        userId: String(user || new Date().getTime()),
+        registered: String(isLoggedIn || true),
+        userId: String(customerId || new Date().getTime()),
       });
       const invokeUrl = `https://tanya.aspiresystems.com/api/bedrock/invoke/stream?${queryParams.toString()}`;
 
@@ -735,7 +899,6 @@ const AgenticShopping = ({
   // -------------------- Handlers (flow) --------------------
   const handleSendMessage = async (question?: string) => {
     if (chatLocked || isLoading || !hasMatchingVariant) return;
-
     const newQuery = question || inputText.trim();
     if (!newQuery) return;
 
@@ -743,11 +906,7 @@ const AgenticShopping = ({
     setInputText("");
 
     setPendingQuery(newQuery);
-
-    const skuFromVariant = selectedVariant?.sku;
-    const fallbackSku = getProductSku(product);
-    const sku = skuFromVariant || fallbackSku || "";
-
+    const sku = selectedVariantProductId || "";
     // Single-variant or master-only: go directly
     if (variantCount <= 1) {
       if (sku) {
@@ -770,7 +929,7 @@ const AgenticShopping = ({
   };
 
   const handleConfirmProceedYes = () => {
-    const sku = selectedVariant?.sku;
+    const sku = selectedVariantProductId;
     if (!sku) return;
     startFlowWithSku(pendingQuery, sku, selectedVariantIdx);
   };
@@ -782,8 +941,8 @@ const AgenticShopping = ({
   };
 
   const handleVariantSubmitAfterNo = () => {
-    if (!selectedVariant || !selectedVariant.sku) return;
-    const sku = selectedVariant.sku;
+    if (!selectedVariantProductId) return;
+    const sku = selectedVariantProductId;
     startFlowWithSku(pendingQuery, sku, selectedVariantIdx);
   };
 
@@ -798,7 +957,7 @@ const AgenticShopping = ({
     setPaymentSubmitted(false);
     setConfirmSuccess(false);
     await getAllAddresses();
-
+    console.log("calling");
     finalizeLiveCards("initial", {
       extractedDetails: extractedDetails ?? undefined,
     });
@@ -837,8 +996,8 @@ const AgenticShopping = ({
   };
 
   const handleSubmitDelivery = () => {
-    if (!selectedDelivery) return;
-    localStorage.setItem("agentic_order_delivery", selectedDelivery);
+    if (!selectedDelivery.id) return;
+    localStorage.setItem("agentic_order_delivery", selectedDelivery.id);
     setDeliverySubmitted(true);
     setShowPaymentOptions(true);
     setPaymentSubmitted(false);
@@ -846,8 +1005,8 @@ const AgenticShopping = ({
     setConfirmSuccess(false);
 
     snapshotToHistory("delivery", {
-      method: selectedDelivery,
-      ...DELIVERY_OPTIONS[selectedDelivery],
+      method: selectedDelivery.id,
+      ...selectedDelivery,
     });
   };
 
@@ -933,29 +1092,27 @@ const AgenticShopping = ({
 
       const { product_total, tax, shipping_fee, currency } = computeSummary();
 
-      const shopperId =
-        order.shopper_id || localStorage.getItem("customerId") || undefined;
+      const shopperId = customerId;
 
       const shippingAddressId =
         chosenAddress?.addressId || chosenAddress?.id || undefined;
 
-      const shippingMethodId = chosenDelivery
-        ? SHIPPING_METHOD_MAP[chosenDelivery]
-        : "GROUND";
+      const shippingMethodId = chosenDelivery ?? "GROUND";
 
       const paymentMethodId = "card-visa";
 
-      const sku = selectedVariant?.sku;
-      const productId = (product as any)?.id || "";
+      const sku = selectedVariantProductId;
 
       const quantity = getQuantity(order);
       const maxPriceMinor =
         typeof order.max_price_minor === "number"
-          ? order.max_price_minor
-          : Math.round(product_total * 100);
+          ? Number(order.max_price_minor)
+          : parseFloat((product_total * 100).toFixed(2));
 
-      const platform = "SFCC";
-      const storeCode = "Sites-SiteGenesis-Site";
+      const platform = "sfcc";
+      const storeCode = "Sites-RefArch-Site";
+      const code = localStorage.getItem("code");
+      // const authDetails = await authData();
 
       const intentMandatePayload = {
         shopper_id: shopperId,
@@ -965,13 +1122,13 @@ const AgenticShopping = ({
         sku: sku,
         platform,
         storeCode,
-        product_id: productId,
+        product_id: sku,
         quantity,
         max_price_minor: maxPriceMinor,
         currency,
         instruction_text: pendingQuery,
+        code,
       };
-
       if (!shopperId || !shippingAddressId) {
         console.error(
           "Missing shopper_id or shipping_address_id for intent-mandate",
@@ -987,20 +1144,23 @@ const AgenticShopping = ({
         return;
       }
 
-      const tokenData = await authData();
-      const token = tokenData.access_token;
-      if (!token) {
-        throw new Error("Failed to fetch auth token for intent-mandate");
-      }
+      // const token = await getJWTToken(cachedToken, tokenExpiry);
+
+      // if (!token) {
+      //   throw new Error("Failed to fetch auth token for intent-mandate");
+      // }
       const { serverUrl } = apiConfig();
-      const response = await fetch(`${serverUrl}/api/intent-mandate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(intentMandatePayload),
-      });
+      const response = await fetch(
+        `${serverUrl}api/SFCC-intent?url=${getHost()}&pubCfg=${clientId()}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(intentMandatePayload),
+        }
+      );
 
       if (!response.ok) {
         const errorBody = await response.text().catch(() => "");
@@ -1067,18 +1227,94 @@ const AgenticShopping = ({
   };
 
   // ---------- any Summary Card ----------
-  const ProductSummaryCard = () => {
-    const img = getProductImage(product, selectedVariant);
-    const title = getProductTitle(product);
+  const ProductSummaryCard = ({ selectedIndex }) => {
+    // ✅ Improved image selection with multiple fallbacks
+    const img = (() => {
+      // Case 1: No variants - use default product image
+      if (!product?.variants) {
+        return (
+          product?.imageGroups?.[0]?.images?.[0]?.disBaseLink ||
+          product?.imageGroups?.[0]?.images?.[0]?.link ||
+          ""
+        );
+      }
 
-    const skuCode = selectedVariant?.sku || "";
+      // Case 2: Variant selected - try to get color-specific image
+      if (selectedIndex !== null && variantsByColor?.[selectedIndex]) {
+        const colorGroup = variantsByColor[selectedIndex];
+
+        // Try large image first
+        if (colorGroup?.images?.large?.[0]) {
+          return (
+            colorGroup.images.large[0].disBaseLink ||
+            colorGroup.images.large[0].link
+          );
+        }
+
+        // Fallback to medium
+        if (colorGroup?.images?.medium?.[0]) {
+          return (
+            colorGroup.images.medium[0].disBaseLink ||
+            colorGroup.images.medium[0].link
+          );
+        }
+
+        // Fallback to small
+        if (colorGroup?.images?.small?.[0]) {
+          return (
+            colorGroup.images.small[0].disBaseLink ||
+            colorGroup.images.small[0].link
+          );
+        }
+      }
+
+      // Case 3: Fall back to default product images from imageGroups
+      // Try to find images without color variation attributes (default images)
+      const defaultImageGroup = product?.imageGroups?.find(
+        (group) => !group.variationAttributes && group.viewType === "large"
+      );
+
+      if (defaultImageGroup?.images?.[0]) {
+        return (
+          defaultImageGroup.images[0].disBaseLink ||
+          defaultImageGroup.images[0].link
+        );
+      }
+
+      // Case 4: Just grab any large image as last resort
+      const anyLargeGroup = product?.imageGroups?.find(
+        (group) => group.viewType === "large"
+      );
+
+      if (anyLargeGroup?.images?.[0]) {
+        return (
+          anyLargeGroup.images[0].disBaseLink || anyLargeGroup.images[0].link
+        );
+      }
+
+      // Case 5: Absolute fallback - first image of any type
+      if (product?.imageGroups?.[0]?.images?.[0]) {
+        return (
+          product.imageGroups[0].images[0].disBaseLink ||
+          product.imageGroups[0].images[0].link
+        );
+      }
+
+      return "";
+    })();
+
+    const title = getProductTitle(product);
+    const skuCode = selectedVariantProductId || "";
     const color = getVariantColor(selectedVariant) || "";
     const size = getVariantSize(selectedVariant) || "";
 
     const { amount: unitPrice } = getVariantPrice(selectedVariant);
-    const hasSku = Boolean(selectedVariant?.sku);
-    const inStock =
-      selectedVariant && hasSku ? isVariantOnStock(selectedVariant) : false;
+    const hasSku = Boolean(product?.id);
+    const inStock = hasSku;
+
+    console.log(img, "the selected image");
+    console.log(selectedIndex, "selectedIndex");
+    console.log(variantsByColor, "variantsByColor");
 
     return (
       <div className="mx-4 mt-2 rounded-xl border border-gray-200 bg-white p-4">
@@ -1106,15 +1342,15 @@ const AgenticShopping = ({
             <div className="text-sm text-gray-700 mb-1">
               {[
                 skuCode && `SKU: ${skuCode}`,
-                color && `Color: ${color}`,
-                size && `Size: ${size}`,
+                pickedColor && `Color: ${pickedColor}`,
+                pickedSize && `Size: ${pickedSize}`,
               ]
                 .filter(Boolean)
                 .join(" • ") || "—"}
             </div>
             <div className="mt-1 text-xl font-semibold text-gray-900">
               {hasSku
-                ? formatCurrency(Number(unitPrice) || 0, CURRENCY_PREF)
+                ? `$${productPrice || product?.price}`
                 : "Currently unavailable"}
             </div>
             {hasSku && !inStock && (
@@ -1134,6 +1370,14 @@ const AgenticShopping = ({
   }: {
     showSubmit?: boolean;
   }) => {
+    console.log(variantsByColor, "the variantsByColor");
+
+    // ✅ Check if there are any variants available
+    const hasAnyVariants = variantsByColor && variantsByColor.length > 0;
+    const hasOrderableVariants = variantsByColor.some(
+      (group) => group.variants && group.variants.length > 0
+    );
+
     const byColor: Record<string, true> = {};
     const colors = variantEntries
       .map((e) => getVariantColor(e.variant))
@@ -1144,73 +1388,71 @@ const AgenticShopping = ({
       .map((e) => getVariantSize(e.variant))
       .filter((s): s is string => !!s && !bySize[s] && (bySize[s] = true));
 
+    // ✅ Early return if no variants available
+    if (!hasAnyVariants || !hasOrderableVariants) {
+      return (
+        <div className="mx-4 mt-4 mb-2 rounded-xl border border-gray-200 bg-white p-4 animate-fade-in">
+          <h3 className="font-semibold text-gray-800">Product Availability</h3>
+          <div className="mt-4 text-center py-8">
+            <p className="text-gray-600">
+              No variants are currently available for this product.
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Please check back later or contact us for availability.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mx-4 mt-4 mb-2 rounded-xl border border-gray-200 bg-white p-4 animate-fade-in">
         <h3 className="font-semibold text-gray-800">Choose a variant</h3>
 
         {/* COLOR SECTION */}
-        {colors.length > 0 && (
-          <div className="mt-4">
-            <div className="flex items-baseline gap-2">
-              <div className="text-sm font-bold">Color :</div>
-              {pickedColor && (
-                <div className="text-sm text-gray-600">{pickedColor}</div>
-              )}
-            </div>
+        <div className="mt-4">
+          <div className="flex items-baseline gap-2">
+            <div className="text-sm font-bold">Color :</div>
+            {pickedColor && (
+              <div className="text-sm text-gray-600">{pickedColor}</div>
+            )}
+          </div>
 
-            <div className="flex flex-wrap gap-4 mt-2">
-              {colors.map((color) => {
+          <div className="flex flex-wrap gap-4 mt-2">
+            {variantsByColor
+              .filter((g) => g.variants && g.variants.length > 0) // ✅ Only show colors that have orderable variants
+              .map((group, index) => {
+                const color = group.name;
                 const isSelected = pickedColor === color;
-                const effectiveSize =
-                  pickedSize || masterSizeRef.current || null;
-
-                const combo = effectiveSize
-                  ? findVariantBy(variantEntries, color, effectiveSize)
-                  : findVariantBy(variantEntries, color, null);
-
-                const hasVariant = !!combo;
-                const inStock = hasVariant && isVariantOnStock(combo!.variant);
-                const money =
-                  hasVariant && inStock
-                    ? pickVariantMoney(combo!.variant, CURRENCY_PREF) ||
-                      pickVariantMoney(combo!.variant)
-                    : null;
-
-                const colorEntry = variantEntries.find(
-                  (e) => getVariantColor(e.variant) === color
-                );
-                const thumb = colorEntry?.images?.[0];
+                const swatch = group.images?.large
+                  ? group.images?.large[0].disBaseLink ??
+                    group?.images?.large[0].link
+                  : "";
 
                 return (
                   <div
-                    key={`color-${color}`}
+                    key={color}
                     className={`flex flex-col items-center w-28 border rounded-md p-2
-                      ${
-                        isSelected
-                          ? "border-2 border-tanya-light"
-                          : "border-gray-300"
-                      }
-                      ${!hasVariant || !inStock ? "opacity-60" : ""}`}
+            ${isSelected ? "border-2 border-[#804c9e]" : "border-gray-300"}`}
                   >
                     <button
                       onClick={() => {
                         setPickedColor(color);
-                        const sizeToUse =
-                          pickedSize || masterSizeRef.current || null;
-                        const match =
-                          (sizeToUse &&
-                            findVariantBy(variantEntries, color, sizeToUse)) ||
-                          findVariantBy(variantEntries, color, null);
-                        if (match) setSelectedVariantIdx(match.index);
+                        setPickedSize(null); // reset size
+                        setSelectedVariantIdx(null);
+                        setSelectedVariantIndex(index);
+                        if (group?.productId) {
+                          setSelectedVariantProductId(group?.productId);
+                        }
                       }}
-                      className="w-full h-20 flex items-center justify-center overflow-hidden"
+                      className="w-full h-20 flex items-center justify-center overflow-hidden p-0"
                       title={color}
                     >
-                      {thumb ? (
+                      {swatch ? (
                         <img
-                          src={thumb}
+                          src={swatch}
                           alt={color}
-                          className="w/full h-full object-contain"
+                          className="w-full h-full object-contain"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-xs px-1">
@@ -1218,87 +1460,91 @@ const AgenticShopping = ({
                         </div>
                       )}
                     </button>
-
-                    <div className="w-full border-t my-2" />
-
-                    {hasVariant && !inStock && (
-                      <div className="text-[11px] text-red-600 text-center">
-                        Out of stock
-                      </div>
-                    )}
-
-                    {!hasVariant && (
-                      <div className="text-[11px] text-red-600 text-center">
-                        any not offered
-                      </div>
-                    )}
-
-                    {hasVariant && inStock && money && (
-                      <div className="text-xs text-gray-800 font-medium text-center">
-                        {formatCurrency(money.cent / 100, money.cur)}
-                        {money.regularCent &&
-                          money.regularCent > money.cent && (
-                            <span className="ml-1 line-through text-gray-500">
-                              {formatCurrency(
-                                money.regularCent / 100,
-                                money.cur
-                              )}
-                            </span>
-                          )}
-                      </div>
-                    )}
                   </div>
                 );
               })}
-            </div>
           </div>
-        )}
+
+          {/* ✅ Show message if no colors available */}
+          {variantsByColor.filter((g) => g.variants && g.variants.length > 0)
+            .length === 0 && (
+            <div className="mt-2 text-sm text-gray-500 italic">
+              No color options are currently available.
+            </div>
+          )}
+        </div>
+
+        <div className="bg-black"></div>
 
         {/* SIZE SECTION */}
-        {sizes.length > 0 && (
-          <div className="mt-4">
-            <div className="flex items-baseline gap-2">
-              <div className="text-sm font-bold">Size :</div>
-              {pickedSize && (
-                <div className="text-sm text-gray-600">{pickedSize}</div>
-              )}
-            </div>
+        {pickedColor &&
+          (() => {
+            const group = variantsByColor.find((g) => g.name === pickedColor);
+            const hasVariants = group?.variants && group.variants.length > 0;
 
-            <div className="flex flex-wrap gap-2 mt-2">
-              {sizes.map((size) => {
-                const isSelected = pickedSize === size;
-                return (
-                  <button
-                    key={`size-${size}`}
-                    onClick={() => {
-                      setPickedSize(size);
-                      const preferred =
-                        (pickedColor &&
-                          findVariantBy(variantEntries, pickedColor, size)) ||
-                        findVariantBy(variantEntries, undefined, size);
-                      if (preferred) setSelectedVariantIdx(preferred.index);
-                    }}
-                    className={`px-4 py-2 rounded-md border text-sm ${
-                      isSelected
-                        ? "border-2 border-tanya-light font-semibold"
-                        : "border-gray-300"
-                    }`}
-                    title={size}
-                  >
-                    {size}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+            if (!hasVariants) {
+              return (
+                <div className="mt-4">
+                  <div className="text-sm font-bold">Size :</div>
+                  <div className="mt-2 text-sm text-gray-500 italic">
+                    No sizes are currently available for this color.
+                  </div>
+                </div>
+              );
+            }
+
+            // Only show size selector if there's more than 1 variant
+            if (group.variants.length > 1) {
+              return (
+                <div className="mt-4">
+                  <div className="flex items-baseline gap-2">
+                    <div className="text-sm font-bold">Size :</div>
+                    {pickedSize && (
+                      <div className="text-sm text-gray-600">{pickedSize}</div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {group.variants.map((v, idx) => {
+                      const size = v.name;
+                      const isSelected = pickedSize === size;
+                      return (
+                        <button
+                          key={`size-${size}-${idx}`}
+                          onClick={() => {
+                            setPickedSize(size);
+                            setSelectedVariantIdx(idx);
+                            setSelectedVariantProductId(v.productId);
+                            setProductPrice(v.price);
+                          }}
+                          className={`px-4 py-2 rounded-md border text-sm ${
+                            isSelected
+                              ? "border-2 border-[#804c9e] font-semibold"
+                              : "border-gray-300"
+                          }`}
+                          title={size}
+                        >
+                          {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            // Auto-select if only 1 variant available
+            return null;
+          })()}
 
         {showSubmit && (
           <div className="mt-4 flex justify-end">
             <button
               onClick={handleVariantSubmitAfterNo}
-              className="px-6 py-2.5 rounded-full font-semibold text-white shadow-md"
-              style={{ background: themeColor }}
+              className={`px-6 py-2.5 rounded-full font-semibold text-white shadow-md ${
+                !hasMatchingVariant ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              style={{ background: themeHeaderBg }}
               disabled={!hasMatchingVariant}
             >
               Submit
@@ -1328,7 +1574,7 @@ const AgenticShopping = ({
     return (
       <div
         className="px-6 pb-6 flex flex-col items-center space-y-4"
-        style={{ backgroundColor: "#14377D" }}
+        style={{ backgroundColor: "#e5dbeb" }}
       >
         <p
           className="text-base font-semibold text-center mt-2"
@@ -1392,7 +1638,7 @@ const AgenticShopping = ({
                     ? "opacity-60 cursor-not-allowed"
                     : "hover:-translate-y-0.5 hover:shadow-lg"
                 }`}
-                style={{ background: `${themeColor}` }}
+                style={{ background: themeHeaderBg }}
               >
                 <Icon
                   icon="fluent:checkmark-circle-24-filled"
@@ -1411,7 +1657,7 @@ const AgenticShopping = ({
                     ? "opacity-60 cursor-not-allowed"
                     : "hover:-translate-y-0.5 hover:shadow-lg"
                 }`}
-                style={{ borderColor: themeColor, color: themeDark }}
+                style={{ borderColor: themeHeaderBg, color: themeHeaderBg }}
               >
                 <Icon
                   icon="fluent:dismiss-circle-24-filled"
@@ -1450,9 +1696,7 @@ const AgenticShopping = ({
     const unitPrice = quantity > 0 ? +(product_total / quantity).toFixed(2) : 0;
     const subtotal = product_total;
     const tax = d?.summary?.tax ?? +(product_total * 0.08).toFixed(2);
-    const shipping_fee =
-      d?.summary?.shipping_fee ??
-      (DELIVERY_OPTIONS[selectedDelivery]?.fee || 0);
+    const shipping_fee = selectedDelivery?.price || 0;
 
     const addressDisplay = d?.address
       ? [
@@ -1522,7 +1766,7 @@ const AgenticShopping = ({
                 <div className="text-xs text-center font-bold text-gray-600">
                   <span className="font-medium">SKU:</span> {pid ?? "—"}
                 </div>
-                {(sku || color || size) && (
+                {(sku || pickedColor || pickedSize) && (
                   <div className="text-xs text-gray-600 mt-0.5 text-center">
                     {sku && (
                       <>
@@ -1530,15 +1774,16 @@ const AgenticShopping = ({
                         &nbsp;&nbsp;
                       </>
                     )}
-                    {color && (
+                    {pickedColor && (
                       <>
-                        <span className="font-medium">Color:</span> {color}
+                        <span className="font-medium">Color:</span>{" "}
+                        {pickedColor}
                         &nbsp;&nbsp;
                       </>
                     )}
-                    {size && (
+                    {pickedSize && (
                       <>
-                        <span className="font-medium">Size:</span> {size}
+                        <span className="font-medium">Size:</span> {pickedSize}
                       </>
                     )}
                   </div>
@@ -1599,10 +1844,7 @@ const AgenticShopping = ({
                 🚚 Delivery
               </div>
               <div className="mt-1 text-sm font-semibold text-gray-900 text-center">
-                {d?.delivery
-                  ? DELIVERY_OPTIONS[d.delivery as DeliveryOptionKey]?.label ||
-                    "—"
-                  : "—"}
+                {selectedDelivery?.name || "—"}
               </div>
             </div>
           </div>
@@ -1661,7 +1903,7 @@ const AgenticShopping = ({
                 <button
                   onClick={handleConfirmWatch}
                   className="inline-flex items-center justify-center rounded-full px-6 py-2.5 font-semibold text-white shadow-md transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-lg"
-                  style={{ background: theme }}
+                  style={{ background: themeHeaderBg }}
                 >
                   Confirm
                 </button>
@@ -1696,10 +1938,7 @@ const AgenticShopping = ({
       .join(", ");
 
     return (
-      <div
-        className="px-6 py-4"
-        style={{ backgroundColor: "var(--tanya-light)" }}
-      >
+      <div className="px-6 py-4" style={{ backgroundColor: themeHeaderBg }}>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 mb-2">
             <Icon icon="mdi:home-map-marker" width="20" color={themeColor} />
@@ -1712,13 +1951,9 @@ const AgenticShopping = ({
   };
 
   const renderDeliverySnapshot = (payload: any) => {
-    const method = payload?.method as DeliveryOptionKey;
-    const opt = method ? DELIVERY_OPTIONS[method] : undefined;
+    const opt = selectedDelivery;
     return (
-      <div
-        className="px-6 py-4"
-        style={{ backgroundColor: "var(--tanya-light)" }}
-      >
+      <div className="px-6 py-4" style={{ backgroundColor: themeHeaderBg }}>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 mb-1">
             <Icon icon="mdi:truck-delivery" width="20" color={themeColor} />
@@ -1728,10 +1963,10 @@ const AgenticShopping = ({
             {opt ? (
               <>
                 <div className="flex items-center gap-2">
-                  <Icon icon={opt.icon} width="18" />
-                  <span className="font-medium">{opt.label}</span>
+                  {/* <Icon icon={opt.icon} width="18" /> */}
+                  <span className="font-medium">{opt.name}</span>
                 </div>
-                <div className="text-gray-600">{opt.subtitle}</div>
+                <div className="text-gray-600">{opt.description}</div>
               </>
             ) : (
               "—"
@@ -1745,10 +1980,7 @@ const AgenticShopping = ({
   const renderPaymentSnapshot = (payload: any) => {
     const method = payload?.method || "card";
     return (
-      <div
-        className="px-6 py-4"
-        style={{ backgroundColor: "var(--tanya-light)" }}
-      >
+      <div className="px-6 py-4" style={{ backgroundColor: themeHeaderBg }}>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 mb-1">
             <Icon
@@ -1825,11 +2057,12 @@ const AgenticShopping = ({
           {/* Header */}
           <div
             style={{
+              height: "55px",
               display: "flex",
               justifyContent: "space-between",
               borderTopLeftRadius: "0.75rem",
               borderBottomLeftRadius: "0.75rem",
-              padding: "0.25rem",
+              padding: "0.5rem",
               background: themeHeaderBg,
             }}
           >
@@ -1841,28 +2074,35 @@ const AgenticShopping = ({
                 gap: "0.5rem",
               }}
             >
-              {/* <Sparkles className="w-8 h-8 ml-2 mr-2 text-white" /> */}
-              <Icon icon="ph:sparkle-duotone" width="25" height="25" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="25"
+                height="25"
+                viewBox="0 0 256 256"
+              >
+                <g fill="currentColor">
+                  <path
+                    d="m194.82 151.43l-55.09 20.3l-20.3 55.09a7.92 7.92 0 0 1-14.86 0l-20.3-55.09l-55.09-20.3a7.92 7.92 0 0 1 0-14.86l55.09-20.3l20.3-55.09a7.92 7.92 0 0 1 14.86 0l20.3 55.09l55.09 20.3a7.92 7.92 0 0 1 0 14.86"
+                    opacity="0.2"
+                  />
+                  <path d="M197.58 129.06L146 110l-19-51.62a15.92 15.92 0 0 0-29.88 0L78 110l-51.62 19a15.92 15.92 0 0 0 0 29.88L78 178l19 51.62a15.92 15.92 0 0 0 29.88 0L146 178l51.62-19a15.92 15.92 0 0 0 0-29.88ZM137 164.22a8 8 0 0 0-4.74 4.74L112 223.85L91.78 169a8 8 0 0 0-4.78-4.78L32.15 144L87 123.78a8 8 0 0 0 4.78-4.78L112 64.15L132.22 119a8 8 0 0 0 4.74 4.74L191.85 144ZM144 40a8 8 0 0 1 8-8h16V16a8 8 0 0 1 16 0v16h16a8 8 0 0 1 0 16h-16v16a8 8 0 0 1-16 0V48h-16a8 8 0 0 1-8-8m104 48a8 8 0 0 1-8 8h-8v8a8 8 0 0 1-16 0v-8h-8a8 8 0 0 1 0-16h8v-8a8 8 0 0 1 16 0v8h8a8 8 0 0 1 8 8" />
+                </g>
+              </svg>
               <div>
                 <p className="font-bold">Agentic Shopping with TANYA</p>
               </div>
             </div>
             <div
               style={{
+                color: "white",
                 display: "flex",
                 alignItems: "center",
                 gap: "1.25rem",
                 margin: "0.75rem",
               }}
+              onClick={onClose}
             >
-              <Icon
-                icon="fluent:dismiss-24-filled"
-                color={"#ffffff"}
-                width="24"
-                height="24"
-                className="cursor-pointer"
-                onClick={onClose}
-              />
+              &#10005;
             </div>
           </div>
 
@@ -1873,12 +2113,12 @@ const AgenticShopping = ({
             {/* Intro bubble */}
             <div
               className="text-sm text-[16px] rounded-r-xl p-3 m-3 rounded-bl-xl w-3/4 text-tanya-contrast"
-              style={{ backgroundColor: "#2b72b8" }}
+              style={{ backgroundColor: "#e5dbeb" }}
             >
               Welcome to your smart shopping companion!
               <p>
                 Simply share your instruction — like “If this product goes below
-                $100, grab it for me.”
+                ${parseInt(product.price) - 5} grab it for me.”
               </p>
               <p>
                 I’ll monitor it, calculate total prices, and place the order
@@ -1887,7 +2127,7 @@ const AgenticShopping = ({
             </div>
 
             {/* any card */}
-            <ProductSummaryCard />
+            <ProductSummaryCard selectedIndex={selectedVariantIndex} />
 
             {/* any selector (always visible for multi-variant) */}
             {variantCount > 1 && <VariantSelectorCard showSubmit={false} />}
@@ -1906,7 +2146,7 @@ const AgenticShopping = ({
                         className="text-sm rounded-l-xl p-3 m-3 mb-4 rounded-br-xl max-w-[75%]"
                         style={{
                           color: "#ffffff",
-                          backgroundColor: "var(--tanya)",
+                          backgroundColor: themeHeaderBg,
                         }}
                       >
                         {chat.query}
@@ -1921,11 +2161,11 @@ const AgenticShopping = ({
                         <div
                           className="text-sm text-tanya-contrast px-7 py-4 rounded-r-xl rounded-bl-2xl w-full"
                           style={{
-                            backgroundColor: "var(--tanya-light)",
+                            backgroundColor: themeHeaderBg,
                             margin: "0.75rem",
                           }}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 text-white">
                             <p>{chat.snapshotPayload.text}</p>
                           </div>
                         </div>
@@ -1938,19 +2178,26 @@ const AgenticShopping = ({
                       <div className="text-sm text-gray-800">
                         Proceed with color:{" "}
                         <span className="font-semibold">
-                          {getVariantColor(selectedVariant) || "—"}
+                          {pickedColor || "—"}
                         </span>
-                        , size:{" "}
-                        <span className="font-semibold">
-                          {getVariantSize(selectedVariant) || "—"}
-                        </span>
+                        {pickedColor && pickedSize ? (
+                          <>
+                            {" "}
+                            , size:{" "}
+                            <span className="font-semibold">
+                              {pickedSize || "—"}
+                            </span>
+                          </>
+                        ) : (
+                          ""
+                        )}
                         ?
                       </div>
                       <div className="mt-3 flex gap-3">
                         <button
                           onClick={handleConfirmProceedYes}
                           className="px-5 py-2 rounded-full text-white font-semibold"
-                          style={{ background: themeColor }}
+                          style={{ background: themeHeaderBg }}
                         >
                           Yes
                         </button>
@@ -1958,8 +2205,8 @@ const AgenticShopping = ({
                           onClick={handleConfirmProceedNo}
                           className="px-5 py-2 rounded-full font-semibold border"
                           style={{
-                            borderColor: themeColor,
-                            color: themeColor,
+                            borderColor: themeHeaderBg,
+                            color: themeHeaderBg,
                           }}
                         >
                           No, change SKU
@@ -1979,11 +2226,11 @@ const AgenticShopping = ({
                       <div
                         className="text-sm text-tanya-contrast px-7 py-4 rounded-r-xl rounded-bl-2xl w-full"
                         style={{
-                          backgroundColor: "var(--tanya-light)",
+                          backgroundColor: themeHeaderBg,
                           margin: "0.75rem",
                         }}
                       >
-                        <div className="flex items-center gap-2 tanya-pulse-text">
+                        <div className="flex items-center gap-2 tanya-pulse-text text-white">
                           <p>Reading your instruction and setting things up…</p>
                         </div>
                       </div>
@@ -2061,7 +2308,7 @@ const AgenticShopping = ({
                       Fetching your addresses...
                     </p>
                   </div>
-                ) : addressList.length > 0 ? (
+                ) : addressList?.length > 0 ? (
                   <div
                     className={`space-y-3 ${
                       addressSubmitted ? "opacity-70" : ""
@@ -2134,7 +2381,7 @@ const AgenticShopping = ({
                             ? "opacity-60 cursor-not-allowed"
                             : "hover:-translate-y-0.5 hover:shadow-lg"
                         }`}
-                        style={{ background: themeColor }}
+                        style={{ background: themeHeaderBg }}
                       >
                         {addressSubmitted
                           ? "Address Submitted"
@@ -2192,52 +2439,41 @@ const AgenticShopping = ({
                     deliverySubmitted ? "opacity-70" : ""
                   }`}
                 >
-                  {(Object.keys(DELIVERY_OPTIONS) as DeliveryOptionKey[]).map(
-                    (key) => {
-                      const opt = DELIVERY_OPTIONS[key];
-                      const isSelected = selectedDelivery === key;
-                      return (
-                        <label
-                          key={key}
-                          className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition hover:shadow-sm ${
-                            isSelected
-                              ? "border-tanya-light"
-                              : "border-gray-300"
-                          } ${deliverySubmitted ? "pointer-events-none" : ""}`}
-                          title={
-                            deliverySubmitted
-                              ? "Delivery already submitted"
-                              : ""
-                          }
-                        >
-                          <input
-                            type="radio"
-                            name="delivery"
-                            className="mt-1 accent-tanya-light"
-                            checked={isSelected}
-                            disabled={deliverySubmitted}
-                            onChange={() => setSelectedDelivery(key)}
-                          />
-                          <div className="flex-1">
-                            <div className="font-semibold text-gray-800 flex items-center gap-2">
-                              <Icon icon={opt.icon} width="18" /> {opt.label}
-                            </div>
-                            <div className="text-sm text-gray-700">
-                              {opt.subtitle}
-                            </div>
+                  {shipping_methods.map((opt) => {
+                    const isSelected = selectedDelivery.id === opt.id;
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition hover:shadow-sm ${
+                          isSelected ? "border-tanya-light" : "border-gray-300"
+                        } ${deliverySubmitted ? "pointer-events-none" : ""}`}
+                        title={
+                          deliverySubmitted ? "Delivery already submitted" : ""
+                        }
+                      >
+                        <input
+                          type="radio"
+                          name="delivery"
+                          className="mt-1 accent-tanya-light"
+                          checked={isSelected}
+                          disabled={deliverySubmitted}
+                          onChange={() => setSelectedDelivery(opt)}
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-800 flex items-center gap-2">
+                            {/* <Icon icon={opt.icon} width="18" /> */}
+                            {opt.name}
                           </div>
-                          <div className="text-sm font-semibold text-gray-800">
-                            {opt.fee === 0
-                              ? "Free"
-                              : formatCurrency(
-                                  opt.fee,
-                                  extractedDetails?.currency || CURRENCY_PREF
-                                )}
+                          <div className="text-sm text-gray-700">
+                            {opt.description}
                           </div>
-                        </label>
-                      );
-                    }
-                  )}
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          {opt.price === 0 ? "Free" : opt.price}
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
 
                 <div className="flex justify-between pt-4">
@@ -2259,7 +2495,7 @@ const AgenticShopping = ({
                         ? "opacity-60 cursor-not-allowed"
                         : "hover:-translate-y-0.5 hover:shadow-lg"
                     }`}
-                    style={{ background: "var(--tanya)" }}
+                    style={{ background: themeHeaderBg }}
                   >
                     {deliverySubmitted
                       ? "Delivery Submitted"
@@ -2349,8 +2585,8 @@ const AgenticShopping = ({
                     onClick={handleCancelPayment}
                     className="px-6 py-2.5 rounded-full font-semibold border transition-all hover:-translate-y-0.5 hover:shadow-sm"
                     style={{
-                      borderColor: "var(--tanya-light)",
-                      color: "var(--tanya-light)",
+                      borderColor: themeHeaderBg,
+                      color: themeHeaderBg,
                     }}
                   >
                     Cancel
@@ -2363,7 +2599,7 @@ const AgenticShopping = ({
                         ? "opacity-60 cursor-not-allowed"
                         : "hover:-translate-y-0.5 hover:shadow-lg"
                     }`}
-                    style={{ background: "var(--tanya)" }}
+                    style={{ background: themeHeaderBg }}
                   >
                     {paymentSubmitted
                       ? "Payment Submitted"
@@ -2396,8 +2632,12 @@ const AgenticShopping = ({
                 chatLocked
                   ? "Complete the current step…"
                   : !hasMatchingVariant
-                  ? "Oops! This combination isn’t available for this product. Try a different option."
-                  : "What would you like me to do? (e.g., If this product goes below $100, grab it for me.)"
+                  ? !pickedSize && isSizeAvailable
+                    ? "Please select a size first."
+                    : "Please select a combination first."
+                  : `What would you like me to do? (e.g., If this product goes below $${
+                      parseInt(product.price) - 5
+                    }, grab it for me.)`
               }
               disabled={isInputDisabled}
               className={`w-full rounded-full p-4 outline-none border-none focus:ring-0 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed
@@ -2417,7 +2657,7 @@ const AgenticShopping = ({
               type="submit"
               disabled={isLoading || chatLocked}
               className="mr-6 font-medium"
-              style={{ color: "var(--tanya-light)" }}
+              style={{ color: themeHeaderBg }}
               onClick={() => handleSendMessage()}
             >
               {isLoading ? (
@@ -2428,7 +2668,7 @@ const AgenticShopping = ({
               ) : (
                 <Icon
                   icon="fluent:send-48-filled"
-                  color={"var(--tanya-light)"}
+                  color={themeHeaderBg}
                   width="24"
                   height="24"
                 />
